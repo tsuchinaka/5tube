@@ -1,0 +1,9 @@
+Package: com.bytebox.youtubeinnertube
+Name: YouTube InnerTube
+Depends: mobilesubstrate
+Version: 0.1.25
+Architecture: iphoneos-arm
+Description: Replaces the dead GData feeds in the iOS 5.1 YouTube app with InnerTube.
+Maintainer: tsu
+Author: tsu
+Section: Tweaks
