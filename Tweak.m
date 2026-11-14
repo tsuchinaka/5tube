@@ -49,9 +49,37 @@ static void YTLog(NSString *line) {
 }
 
 static NSString *const YTPrefsID = @"com.sokubit.5tube";
+static NSString *const YTLegacyPrefsID = @"com.bytebox.youtubeinnertube";
 
 static void YTSyncPrefs(void) {
     CFPreferencesAppSynchronize((__bridge CFStringRef)YTPrefsID);
+}
+
+// The package id changed from com.bytebox.youtubeinnertube. Carry the old
+// settings and sign-in over so the session does not have to be made again.
+static void YTMigratePrefs(void) {
+    CFStringRef oldID = (__bridge CFStringRef)YTLegacyPrefsID;
+    CFStringRef newID = (__bridge CFStringRef)YTPrefsID;
+    CFPreferencesAppSynchronize(oldID);
+    CFArrayRef keys = CFPreferencesCopyKeyList(oldID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (!keys) return;
+    CFIndex count = CFArrayGetCount(keys);
+    for (CFIndex i = 0; i < count; i++) {
+        CFStringRef key = (CFStringRef)CFArrayGetValueAtIndex(keys, i);
+        CFPropertyListRef present = CFPreferencesCopyAppValue(key, newID);
+        if (present) {
+            CFRelease(present);
+            continue;
+        }
+        CFPropertyListRef value = CFPreferencesCopyAppValue(key, oldID);
+        if (value) {
+            CFPreferencesSetAppValue(key, value, newID);
+            CFRelease(value);
+        }
+    }
+    CFRelease(keys);
+    CFPreferencesAppSynchronize(newID);
+    YTLog(@"prefs migrated");
 }
 
 static BOOL YTPrefBool(NSString *key, BOOL fallback) {
@@ -2259,6 +2287,7 @@ static void YTLoad(void) {
     YTDurationCache = [NSMutableDictionary dictionary];
     YTNo720 = [NSMutableSet set];
     YTInstallCrashHandler();
+    YTMigratePrefs();
     YTAuthInstall();
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTPrefsChanged, CFSTR("com.sokubit.5tube/reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     YTStartProxy();
