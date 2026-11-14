@@ -529,10 +529,10 @@ NSString *YTEnsure720(NSString *videoID, NSString *videoURL, NSString *audioURL)
     NSString *audioPart = [NSString stringWithFormat:@"/var/tmp/yt720-%@.a", videoID];
     NSString *part = [path stringByAppendingString:@".part"];
     YTMuxNote([NSString stringWithFormat:@"mux 720 %@", videoID]);
-    BOOL downloaded = YTDownload(videoURL, videoPart, 70ull * 1024 * 1024) && YTDownload(audioURL, audioPart, 12ull * 1024 * 1024);
+    BOOL downloaded = YTDownload(videoURL, videoPart, 110ull * 1024 * 1024) && YTDownload(audioURL, audioPart, 16ull * 1024 * 1024);
     YTTrack video = { 0 };
     YTTrack audio = { 0 };
-    int ok = downloaded && YTParseFile(videoPart, &video) && (video.width >= 1280 || video.height >= 720) && YTParseFile(audioPart, &audio);
+    int ok = downloaded && YTParseFile(videoPart, &video) && video.height >= 360 && YTParseFile(audioPart, &audio);
     ok = ok && YTWriteMovie(videoPart, audioPart, part, &video, &audio);
     YTFreeTrack(&video);
     YTFreeTrack(&audio);

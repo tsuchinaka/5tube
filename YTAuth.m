@@ -157,6 +157,13 @@ static void YTAuthApplyUI(void) {
             ((void (*)(id, SEL, id))objc_msgSend)(auth, @selector(setAccountYouTubeName:), name);
         if ([auth respondsToSelector:@selector(setAccountToken:)])
             ((void (*)(id, SEL, id))objc_msgSend)(auth, @selector(setAccountToken:), @"ytinner");
+        if ([auth respondsToSelector:@selector(setAccountTokenDate:)])
+            ((void (*)(id, SEL, id))objc_msgSend)(auth, @selector(setAccountTokenDate:), [NSDate date]);
+        Ivar password = class_getInstanceVariable([auth class], "_password");
+        if (password && ivar_getTypeEncoding(password) && ivar_getTypeEncoding(password)[0] == '@' && !object_getIvar(auth, password)) {
+            objc_setAssociatedObject(auth, password, @"", OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            object_setIvar(auth, password, @"");
+        }
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:@"YTAccountAuthenticatorDidAuthenticateNotification" object:auth];
     YTApplying = NO;

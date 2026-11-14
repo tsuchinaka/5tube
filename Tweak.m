@@ -348,6 +348,50 @@ static NSString *YTLocalPlayURL(NSString *videoID, BOOL high) {
     return [NSString stringWithFormat:@"http://127.0.0.1:%d/%@.360.mp4", YTProxyPort, videoID];
 }
 
+static int YTAvcLevel(NSString *mime) {
+    NSRange mark = [mime rangeOfString:@"avc1." options:NSCaseInsensitiveSearch];
+    if (mark.location == NSNotFound || mark.location + 11 > mime.length) return 0;
+    NSString *hex = [mime substringWithRange:NSMakeRange(mark.location + mark.length + 4, 2)];
+    unsigned int level = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:hex];
+    [scanner scanHexInt:&level];
+    return (int)level;
+}
+
+static void YTPickStreams(NSMutableDictionary *streams, NSArray *formats) {
+    NSDictionary *video = nil;
+    NSDictionary *audio = nil;
+    int videoScore = -1;
+    int audioScore = -1;
+    for (id format in formats) {
+        if (![format isKindOfClass:[NSDictionary class]]) continue;
+        NSString *url = YTGet(format, @"url");
+        NSString *mime = YTGet(format, @"mimeType") ?: @"";
+        if (![url isKindOfClass:[NSString class]] || !url.length) continue;
+        int bitrate = [[YTGet(format, @"bitrate") description] intValue];
+        if ([mime rangeOfString:@"audio/mp4"].location != NSNotFound || [mime rangeOfString:@"mp4a"].location != NSNotFound) {
+            if ([mime rangeOfString:@"video"].location != NSNotFound) continue;
+            if (bitrate > 192000) continue;
+            if (bitrate > audioScore) { audioScore = bitrate; audio = format; }
+            continue;
+        }
+        if ([mime rangeOfString:@"avc1"].location == NSNotFound) continue;
+        int height = [[YTGet(format, @"height") description] intValue];
+        int fps = [[YTGet(format, @"fps") description] intValue];
+        if (fps > 30 || height < 144 || height > 720) continue;
+        int level = YTAvcLevel(mime);
+        if (level > 0x28) continue;
+        int score = height * 1000000 + bitrate / 1000;
+        if (level > 0x1f) score -= 200000;
+        if (score > videoScore) { videoScore = score; video = format; }
+    }
+    if (video) {
+        [streams setObject:[video objectForKey:@"url"] forKey:@"hi"];
+        [streams setObject:[[YTGet(video, @"height") description] length] ? [YTGet(video, @"height") description] : @"0" forKey:@"hih"];
+    }
+    if (audio) [streams setObject:[audio objectForKey:@"url"] forKey:@"au"];
+}
+
 static NSString *YTStreamURL(NSString *videoID, NSString *itag) {
     [YTCacheLock lock];
     id info = [YTPlayCache objectForKey:videoID];
@@ -375,10 +419,14 @@ static NSString *YTFetchUpstream(NSString *videoID) {
                                  [NSNumber numberWithBool:YES], @"racyCheckOk",
                                  nil]);
     NSMutableDictionary *streams = [NSMutableDictionary dictionary];
+    NSMutableArray *formats = [NSMutableArray array];
     id lists = [NSArray arrayWithObjects:YTGet(YTGet(json, @"streamingData"), @"formats"), YTGet(YTGet(json, @"streamingData"), @"adaptiveFormats"), nil];
     for (id list in lists) {
         if (![list isKindOfClass:[NSArray class]]) continue;
-        for (id format in list) YTTakeStream(streams, format);
+        for (id format in list) {
+            YTTakeStream(streams, format);
+            if ([format isKindOfClass:[NSDictionary class]]) [formats addObject:format];
+        }
     }
     id length = YTGet(YTGet(json, @"videoDetails"), @"lengthSeconds");
     NSInteger seconds = [[length description] integerValue];
@@ -392,17 +440,25 @@ static NSString *YTFetchUpstream(NSString *videoID) {
         id againLists = [NSArray arrayWithObjects:YTGet(YTGet(again, @"streamingData"), @"formats"), YTGet(YTGet(again, @"streamingData"), @"adaptiveFormats"), nil];
         for (id list in againLists) {
             if (![list isKindOfClass:[NSArray class]]) continue;
-            for (id format in list) YTTakeStream(streams, format);
+            for (id format in list) {
+                YTTakeStream(streams, format);
+                if ([format isKindOfClass:[NSDictionary class]]) [formats addObject:format];
+            }
         }
         found = [streams objectForKey:@"18"] ?: [streams objectForKey:@"136"];
         YTLog([NSString stringWithFormat:@"age retry %@ %@", videoID, found.length ? @"ok" : @"no"]);
     }
-    if (found.length) {
+    YTPickStreams(streams, formats);
+    if (![streams objectForKey:@"au"]) {
+        NSString *audio = [streams objectForKey:@"140"] ?: [streams objectForKey:@"139"];
+        if (audio.length) [streams setObject:audio forKey:@"au"];
+    }
+    if (found.length || [streams objectForKey:@"hi"]) {
         [YTCacheLock lock];
         [YTPlayCache setObject:streams forKey:videoID];
         if (seconds > 0) [YTDurationCache setObject:[NSNumber numberWithInteger:seconds] forKey:videoID];
         [YTCacheLock unlock];
-        YTLog([NSString stringWithFormat:@"upstream %@ %ld 720 %@", videoID, (long)seconds, [streams objectForKey:@"136"] ? @"yes" : @"no"]);
+        YTLog([NSString stringWithFormat:@"upstream %@ %ld hi %@ %@", videoID, (long)seconds, [streams objectForKey:@"hih"] ?: @"-", [streams objectForKey:@"hi"] ? @"yes" : @"no"]);
     }
     return found;
 }
@@ -412,8 +468,10 @@ void YTMuxNote(NSString *line) {
 }
 
 static NSString *YTPlayURL(NSString *videoID) {
-    if (![YTFetchUpstream(videoID) length] || YTProxyPort <= 0) return nil;
-    return YTLocalPlayURL(videoID, YTWant720());
+    NSString *progressive = YTFetchUpstream(videoID);
+    BOOL high = [YTStreamURL(videoID, @"hi") length] > 0;
+    if (YTProxyPort <= 0 || (!progressive.length && !high)) return nil;
+    return YTLocalPlayURL(videoID, YTWant720() && high);
 }
 
 static NSDictionary *YTDetails(NSString *videoID) {
@@ -455,7 +513,8 @@ static NSString *YTEntry(NSDictionary *item) {
     NSString *lo = (high && YTPrefBool(@"cellular720", YES)) ? hi : YTLocalPlayURL(videoID, NO);
     if (!hi.length) hi = [NSString stringWithFormat:@"https://www.youtube.com/watch?v=%@", videoID];
     if (!lo.length) lo = hi;
-    NSString *thumb = [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/hqdefault.jpg", videoID];
+    NSString *customThumb = [item objectForKey:@"thumb"];
+    NSString *thumb = [customThumb isKindOfClass:[NSString class]] && customThumb.length ? customThumb : [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/hqdefault.jpg", videoID];
     return [NSString stringWithFormat:
             @"<entry yt:x='1'>"
             "<id yt:x='1'>http://gdata.youtube.com/feeds/api/videos/%@</id>"
@@ -542,6 +601,10 @@ static NSString *YTFindToken(id node, int depth) {
         if (![token isKindOfClass:[NSString class]] || ![token length]) {
             id next = YTGet(node, @"nextContinuationData");
             token = [next isKindOfClass:[NSDictionary class]] ? YTGet(next, @"continuation") : nil;
+        }
+        if (![token isKindOfClass:[NSString class]] || ![token length]) {
+            id reload = YTGet(node, @"reloadContinuationData");
+            token = [reload isKindOfClass:[NSDictionary class]] ? YTGet(reload, @"continuation") : nil;
         }
         if ([token isKindOfClass:[NSString class]] && [token length]) return token;
         for (id child in [node allValues]) {
@@ -633,6 +696,80 @@ static NSArray *YTFillKey(NSString *key, NSString *query, NSString *browseID, NS
     NSArray *snapshot = [NSArray arrayWithArray:all];
     YTListLeave();
     return snapshot;
+}
+
+static NSArray *YTFillSearch(NSString *key, NSString *query, NSString *params, NSString *region, NSInteger need) {
+    YTListEnter();
+    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
+    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
+    NSMutableArray *all = [YTPageCache objectForKey:key];
+    if (!all) {
+        all = [NSMutableArray array];
+        [YTPageCache setObject:all forKey:key];
+    }
+    BOOL paging = YTPrefBool(@"paging", YES);
+    while ((NSInteger)[all count] < need) {
+        NSString *token = [YTTokenCache objectForKey:key];
+        id json = nil;
+        if (!token.length && ![all count]) {
+            NSMutableDictionary *body = [NSMutableDictionary dictionary];
+            [body setObject:(query.length ? query : @"a") forKey:@"query"];
+            if (params.length) [body setObject:params forKey:@"params"];
+            NSMutableDictionary *client = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+                                           @"ANDROID", @"clientName",
+                                           @"20.10.38", @"clientVersion",
+                                           @"en", @"hl",
+                                           (region.length == 2 ? region : @"US"), @"gl",
+                                           [NSNumber numberWithInt:30], @"androidSdkVersion",
+                                           nil];
+            [body setObject:[NSDictionary dictionaryWithObject:client forKey:@"client"] forKey:@"context"];
+            json = YTPost(@"search", body);
+        } else if (paging && token.length) {
+            json = YTPost(@"search", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
+        } else break;
+        NSArray *page = YTVideosFromJSON(json);
+        if (![page count]) break;
+        NSMutableSet *seen = [NSMutableSet setWithArray:[all valueForKey:@"id"]];
+        for (NSDictionary *item in page) {
+            NSString *vid = [item objectForKey:@"id"];
+            NSString *views = [item objectForKey:@"views"] ?: @"";
+            if (!vid.length || [seen containsObject:vid]) continue;
+            if ([views rangeOfString:@"watching" options:NSCaseInsensitiveSearch].location != NSNotFound) continue;
+            [seen addObject:vid];
+            [all addObject:item];
+        }
+        NSString *next = YTFindToken(json, 0);
+        if (next.length) [YTTokenCache setObject:next forKey:key];
+        else {
+            [YTTokenCache removeObjectForKey:key];
+            break;
+        }
+        if (!paging) break;
+    }
+    NSArray *snapshot = [NSArray arrayWithArray:all];
+    YTListLeave();
+    return snapshot;
+}
+
+static NSString *YTChartRegion(NSArray *parts) {
+    NSString *maybe = YTAt(parts, 4);
+    if ([YTAt(parts, 5) length] && maybe.length == 2) return [maybe uppercaseString];
+    NSString *code = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode];
+    return code.length == 2 ? [code uppercaseString] : @"US";
+}
+
+static NSArray *YTMostViewed(NSString *time, NSString *region, NSInteger need) {
+    NSString *slot = @"all_time";
+    NSString *params = @"CAMSAhAB";
+    if ([time isEqualToString:@"today"]) {
+        slot = @"today";
+        params = @"CAMSAggC";
+    } else if ([time isEqualToString:@"this_week"]) {
+        slot = @"this_week";
+        params = @"CAMSAggD";
+    }
+    NSString *key = [NSString stringWithFormat:@"chart:%@:%@", slot, region ?: @"US"];
+    return YTFillSearch(key, @"a", params, region, need);
 }
 
 static NSArray *YTChannelUploads(NSString *user) {
@@ -875,6 +1012,9 @@ static NSMutableDictionary *YTVideoItem(NSString *videoID, NSString *title, NSSt
     return item;
 }
 
+static NSString *YTBestImage(id node);
+static NSString *YTJoinedCount(id node, int depth);
+
 static void YTCollectTiles(id node, NSMutableArray *videos, NSMutableArray *playlists, NSMutableSet *seen, int depth) {
     if (!node || depth > 24) return;
     if ([node isKindOfClass:[NSArray class]]) {
@@ -902,12 +1042,74 @@ static void YTCollectTiles(id node, NSMutableArray *videos, NSMutableArray *play
                 NSMutableDictionary *item = [NSMutableDictionary dictionary];
                 YTSet(item, @"playlistId", cid);
                 YTSet(item, @"title", title.length ? title : cid);
-                YTSet(item, @"count", @"0");
+                NSString *count = YTJoinedCount(YTGet(YTGet(tile, @"header"), @"tileHeaderRenderer"), 0);
+                if (!count.length) count = YTJoinedCount(YTGet(tile, @"metadata"), 0);
+                YTSet(item, @"count", count.length ? count : @"0");
+                NSString *thumb = YTBestImage(YTGet(YTGet(tile, @"header"), @"tileHeaderRenderer"));
+                if (!thumb.length) thumb = YTBestImage(YTGet(YTGet(YTGet(tile, @"header"), @"tileHeaderRenderer"), @"thumbnail"));
+                if (thumb.length) YTSet(item, @"thumb", thumb);
                 [playlists addObject:item];
             }
         }
     }
     for (id child in [node allValues]) YTCollectTiles(child, videos, playlists, seen, depth + 1);
+}
+
+static NSString *YTBestImage(id node) {
+    id list = [node isKindOfClass:[NSDictionary class]] ? YTGet(node, @"thumbnails") : nil;
+    if (![list isKindOfClass:[NSArray class]]) return nil;
+    NSString *best = nil;
+    int bestW = -1;
+    for (id item in list) {
+        NSString *url = YTGet(item, @"url");
+        if (![url isKindOfClass:[NSString class]] || !url.length) continue;
+        int width = [[YTGet(item, @"width") description] intValue];
+        if (!best || width >= bestW) {
+            best = url;
+            bestW = width;
+        }
+    }
+    if ([best hasPrefix:@"//"]) best = [@"https:" stringByAppendingString:best];
+    return best;
+}
+
+static NSString *YTIconURL(NSString *remote) {
+    if (!remote.length) return @"";
+    if (YTProxyPort <= 0) return remote;
+    return [NSString stringWithFormat:@"http://127.0.0.1:%d/icon?u=%@", YTProxyPort, YTQueryEscape(remote)];
+}
+
+static NSString *YTJoinedCount(id node, int depth) {
+    if (!node || depth > 6) return nil;
+    if ([node isKindOfClass:[NSArray class]]) {
+        NSMutableString *joined = [NSMutableString string];
+        BOOL text = NO;
+        for (id child in node) {
+            if ([child isKindOfClass:[NSString class]]) {
+                [joined appendString:child];
+                text = YES;
+            } else if ([child isKindOfClass:[NSDictionary class]]) {
+                id bit = YTGet(child, @"text");
+                if ([bit isKindOfClass:[NSString class]]) {
+                    [joined appendString:bit];
+                    text = YES;
+                }
+            }
+        }
+        if (text && [joined rangeOfString:@"video" options:NSCaseInsensitiveSearch].location != NSNotFound)
+            return YTDigits(joined);
+        for (id child in node) {
+            NSString *found = YTJoinedCount(child, depth + 1);
+            if (found.length) return found;
+        }
+        return nil;
+    }
+    if (![node isKindOfClass:[NSDictionary class]]) return nil;
+    for (id child in [node allValues]) {
+        NSString *found = YTJoinedCount(child, depth + 1);
+        if (found.length) return found;
+    }
+    return nil;
 }
 
 static void YTCollectTabs(id node, NSMutableArray *out, NSMutableSet *seen, int depth) {
@@ -927,6 +1129,8 @@ static void YTCollectTabs(id node, NSMutableArray *out, NSMutableSet *seen, int 
             YTSet(item, @"title", title);
             YTSet(item, @"channelId", title);
             YTSet(item, @"params", params);
+            NSString *avatar = YTBestImage(YTGet(tab, @"thumbnail"));
+            if (avatar.length) YTSet(item, @"thumb", YTIconURL(avatar));
             [out addObject:item];
         }
     }
@@ -1189,8 +1393,21 @@ static NSData *YTAtomForRequest(NSURLRequest *request) {
         [items addObjectsFromArray:YTLiked(start + limit)];
     } else if ([path rangeOfString:@"newsubscriptionvideos"].location != NSNotFound) {
         NSString *sub = [query objectForKey:@"sub"];
-        if (sub.length) [items addObjectsFromArray:YTAuthVideos([@"subtab:" stringByAppendingString:sub], @"FEsubscriptions", sub, start + limit)];
-        else [items addObjectsFromArray:YTSubVideos(start + limit)];
+        if (sub.length) {
+            NSArray *videos = YTAuthVideos([@"subtab:" stringByAppendingString:sub], @"FEsubscriptions", sub, start + limit);
+            if (limit <= 1 && videos.count) {
+                NSString *avatar = nil;
+                for (NSDictionary *row in YTSubscriptionList(1)) {
+                    if ([[row objectForKey:@"params"] isEqualToString:sub]) { avatar = [row objectForKey:@"thumb"]; break; }
+                }
+                if (avatar.length) {
+                    NSMutableDictionary *preview = [NSMutableDictionary dictionaryWithDictionary:[videos objectAtIndex:0]];
+                    [preview setObject:avatar forKey:@"thumb"];
+                    videos = [NSArray arrayWithObject:preview];
+                }
+            }
+            [items addObjectsFromArray:videos];
+        } else [items addObjectsFromArray:YTSubVideos(start + limit)];
     } else if ([path rangeOfString:@"/subscriptions"].location != NSNotFound) {
         NSArray *all = YTSubscriptionList(start + limit);
         NSArray *page = YTPage(all, start, limit);
@@ -1223,16 +1440,16 @@ static NSData *YTAtomForRequest(NSURLRequest *request) {
     } else if (q.length) {
         [items addObjectsFromArray:YTFillKey([@"search:" stringByAppendingString:q], q, nil, start + limit)];
     } else if ([path rangeOfString:@"most_viewed"].location != NSNotFound) {
-        [items addObjectsFromArray:YTFillKey(@"chart:viewed", @"most viewed this week", nil, start + limit)];
+        [items addObjectsFromArray:YTMostViewed([query objectForKey:@"time"], YTChartRegion(parts), start + limit)];
     } else if ([path rangeOfString:@"top_rated"].location != NSNotFound) {
-        [items addObjectsFromArray:YTFillKey(@"chart:rated", @"highest rated", nil, start + limit)];
+        [items addObjectsFromArray:YTMostViewed(@"this_week", YTChartRegion(parts), start + limit)];
     } else if ([path rangeOfString:@"recently_featured"].location != NSNotFound ||
                [[query objectForKey:@"orderby"] isEqualToString:@"updated"]) {
-        if (YTAuthSignedIn() && YTPrefBool(@"accountHome", YES)) [items addObjectsFromArray:YTSubVideos(start + limit)];
-        else [items addObjectsFromArray:YTFillKey(@"chart:featured", @"trending", nil, start + limit)];
+        if (YTAuthSignedIn() && YTPrefBool(@"accountHome", YES)) [items addObjectsFromArray:YTAuthVideos(@"home", @"FEwhat_to_watch", nil, start + limit)];
+        else [items addObjectsFromArray:YTMostViewed(@"this_week", YTChartRegion(parts), start + limit)];
     } else if ([path rangeOfString:@"/feeds/api/videos"].location != NSNotFound) {
-        if (YTAuthSignedIn() && YTPrefBool(@"accountHome", YES)) [items addObjectsFromArray:YTSubVideos(start + limit)];
-        else [items addObjectsFromArray:YTFillKey(@"chart:featured", @"trending", nil, start + limit)];
+        if (YTAuthSignedIn() && YTPrefBool(@"accountHome", YES)) [items addObjectsFromArray:YTAuthVideos(@"home", @"FEwhat_to_watch", nil, start + limit)];
+        else [items addObjectsFromArray:YTMostViewed(@"this_week", YTChartRegion(parts), start + limit)];
     }
     NSArray *page = YTPage(items, start, limit);
     YTLog([NSString stringWithFormat:@"atom %@ q=%@ items %u page %u", path, q ?: @"", (unsigned)[items count], (unsigned)[page count]]);
@@ -1607,7 +1824,7 @@ static NSArray *YTPSItems(BOOL playlists) {
             BOOL scheme = [key isEqualToString:@"scheme"] || [key isEqualToString:@"SubscriptionScheme"];
             if (text) [dict setObject:title forKey:key];
             else if (scheme) [dict setObject:(playlists ? @"playlist" : @"channel") forKey:key];
-            else if ([key isEqualToString:@"count"]) [dict setObject:[NSNumber numberWithInt:1] forKey:key];
+            else if ([key isEqualToString:@"count"]) [dict setObject:[NSNumber numberWithInt:playlists ? (int)[[item objectForKey:@"count"] integerValue] : 1] forKey:key];
             else [dict setObject:href forKey:key];
         }
         [dict setObject:cid forKey:@"playlistId"];
@@ -1617,7 +1834,7 @@ static NSArray *YTPSItems(BOOL playlists) {
         if (hrefGlobal) [dict setObject:href forKey:hrefGlobal];
         if (labelGlobal) [dict setObject:title forKey:labelGlobal];
         if (editGlobal) [dict setObject:href forKey:editGlobal];
-        if (countGlobal) [dict setObject:[NSNumber numberWithInt:1] forKey:countGlobal];
+        if (countGlobal) [dict setObject:[NSNumber numberWithInt:playlists ? (int)[[item objectForKey:@"count"] integerValue] : 1] forKey:countGlobal];
         if (schemeGlobal) [dict setObject:(playlists ? @"playlist" : @"channel") forKey:schemeGlobal];
         if (needGlobal) [dict setObject:[NSNumber numberWithBool:NO] forKey:needGlobal];
         [out addObject:dict];
@@ -1821,23 +2038,75 @@ static void YTHookPSFail(id self, SEL cmd, id error) {
     YTLog([NSString stringWithFormat:@"ps fail %@", error]);
 }
 
-static void (*YTOrigHistoryReload)(id, SEL);
-static void YTHookHistoryReload(id self, SEL cmd) {
-    if (YTOrigHistoryReload) YTOrigHistoryReload(self, cmd);
-    if (!YTAuthSignedIn() || !YTPrefBool(@"accountHistory", YES)) return;
-    Ivar videos = class_getInstanceVariable(NSClassFromString(@"YTVideoDataSource"), "_videos");
-    Ivar history = class_getInstanceVariable([self class], "_history");
-    if (videos) object_setIvar(self, videos, [NSMutableArray array]);
-    if (history) object_setIvar(self, history, [NSMutableArray array]);
+static void YTStoreIvar(id obj, NSString *name, id value) {
+    if (!obj || !name.length) return;
+    Ivar ivar = nil;
+    Class cls = [obj class];
+    while (cls && !ivar) {
+        ivar = class_getInstanceVariable(cls, [name UTF8String]);
+        cls = class_getSuperclass(cls);
+    }
+    if (!ivar) return;
+    const char *type = ivar_getTypeEncoding(ivar);
+    if (!type || type[0] != '@') return;
+    objc_setAssociatedObject(obj, ivar, value, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    object_setIvar(obj, ivar, value);
+}
+
+static NSMutableArray *YTKeptRequests;
+
+static void YTKeepRequest(id request) {
+    if (!request) return;
+    if (!YTKeptRequests) YTKeptRequests = [NSMutableArray array];
+    [YTKeptRequests addObject:request];
+    if ([YTKeptRequests count] > 6) [YTKeptRequests removeObjectAtIndex:0];
+}
+
+static BOOL YTCanTakeSearch(id source) {
+    return [source respondsToSelector:@selector(searchRequest:receivedVideos:startIndex:videosRemaining:)];
+}
+
+static void YTLoadAccountFeed(id source, NSString *urlString, NSString *label) {
+    if (!YTCanTakeSearch(source)) return;
     Class cls = NSClassFromString(@"YTSearchRequest");
     if (!cls) return;
     id request = [[cls alloc] init];
+    YTKeepRequest(request);
     if ([request respondsToSelector:@selector(setDelegate:)])
-        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(setDelegate:), self);
-    NSURL *url = [NSURL URLWithString:@"http://gdata.youtube.com/feeds/api/users/default/watch_history?start-index=1&max-results=40"];
+        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(setDelegate:), source);
     if ([request respondsToSelector:@selector(loadRequest:)])
-        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(loadRequest:), [NSURLRequest requestWithURL:url]);
-    YTLog(@"history reload");
+        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(loadRequest:), [NSURLRequest requestWithURL:[NSURL URLWithString:urlString]]);
+    YTLog(label);
+}
+
+static void (*YTOrigHistoryReload)(id, SEL);
+static void YTHookHistoryReload(id self, SEL cmd) {
+    if (!YTAuthSignedIn() || !YTPrefBool(@"accountHistory", YES) || !YTCanTakeSearch(self)) {
+        if (YTOrigHistoryReload) YTOrigHistoryReload(self, cmd);
+        return;
+    }
+    @try {
+        if ([self respondsToSelector:@selector(_clearVideos)]) [self performSelector:@selector(_clearVideos)];
+        else YTStoreIvar(self, @"_videos", [NSMutableArray array]);
+        YTStoreIvar(self, @"_history", [NSMutableArray array]);
+    } @catch (NSException *exception) {
+        YTLog([NSString stringWithFormat:@"history clear %@", exception]);
+    }
+    YTLoadAccountFeed(self, @"http://gdata.youtube.com/feeds/api/users/default/watch_history?start-index=1&max-results=40", @"history reload");
+}
+
+static void (*YTOrigMyVideosReload)(id, SEL);
+static void YTHookMyVideosReload(id self, SEL cmd) {
+    if (!YTAuthSignedIn() || !YTCanTakeSearch(self)) {
+        if (YTOrigMyVideosReload) YTOrigMyVideosReload(self, cmd);
+        return;
+    }
+    @try {
+        if ([self respondsToSelector:@selector(_clearVideos)]) [self performSelector:@selector(_clearVideos)];
+    } @catch (NSException *exception) {
+        YTLog([NSString stringWithFormat:@"my videos clear %@", exception]);
+    }
+    YTLoadAccountFeed(self, @"http://gdata.youtube.com/feeds/api/users/default/uploads?start-index=1&max-results=25", @"my videos reload");
 }
 
 static void YTHookSAX(void) {
@@ -1861,6 +2130,7 @@ static void YTHookSAX(void) {
     YTHookMethod(post, @"postComment:forVideo:", (IMP)YTHookPostComment, NULL);
     YTHookMethod(NSClassFromString(@"YTAccountFeedRequest"), @"addVideo:toPlaylist:", (IMP)YTHookAddToList, NULL);
     YTHookMethod(NSClassFromString(@"YTHistoryVideoDataSource"), @"reloadData", (IMP)YTHookHistoryReload, (IMP *)&YTOrigHistoryReload);
+    YTHookMethod(NSClassFromString(@"YTMyVideosVideoDataSource"), @"reloadData", (IMP)YTHookMyVideosReload, (IMP *)&YTOrigMyVideosReload);
 }
 
 static NSURLConnection *(*YTOrigConnect)(id, SEL, NSURLRequest *, id);
@@ -2070,6 +2340,29 @@ static void YTServe(int client) {
     if (parts.count < 2) return;
     NSString *method = [parts objectAtIndex:0];
     NSString *rawPath = [parts objectAtIndex:1];
+    if ([rawPath rangeOfString:@"/icon?"].location == 0) {
+        NSString *remote = nil;
+        NSRange query = [rawPath rangeOfString:@"u="];
+        if (query.location != NSNotFound) {
+            NSString *value = [rawPath substringFromIndex:query.location + 2];
+            NSRange amp = [value rangeOfString:@"&"];
+            if (amp.location != NSNotFound) value = [value substringToIndex:amp.location];
+            remote = [value stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding] ?: value;
+        }
+        NSURL *iconURL = remote.length ? [NSURL URLWithString:remote] : nil;
+        NSString *host = [[iconURL host] lowercaseString] ?: @"";
+        BOOL allowed = [host hasSuffix:@"ggpht.com"] || [host hasSuffix:@"googleusercontent.com"] || [host hasSuffix:@"ytimg.com"];
+        NSData *icon = (allowed && [iconURL scheme]) ? YTGET(remote) : nil;
+        if (!icon.length) {
+            NSString *miss = @"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            YTWriteAll(client, [miss UTF8String], [miss length]);
+            return;
+        }
+        NSString *headText = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\nConnection: close\r\n\r\n", (unsigned)[icon length]];
+        YTWriteAll(client, [headText UTF8String], [headText length]);
+        if (![method isEqualToString:@"HEAD"]) YTWriteAll(client, [icon bytes], [icon length]);
+        return;
+    }
     if (YTPrefBool(@"captions", YES) && [rawPath rangeOfString:@".srt"].location != NSNotFound) {
         NSString *name = [[rawPath lastPathComponent] stringByDeletingPathExtension];
         NSArray *bits = [name componentsSeparatedByString:@"."];
@@ -2141,7 +2434,7 @@ static void YTServe(int client) {
     [YTCacheLock unlock];
     NSString *muxed = nil;
     if (!skip720) {
-        muxed = YTEnsure720(videoID, YTStreamURL(videoID, @"136"), YTStreamURL(videoID, @"140"));
+        muxed = YTEnsure720(videoID, YTStreamURL(videoID, @"hi"), YTStreamURL(videoID, @"au"));
         if (!muxed.length) {
             [YTCacheLock lock];
             [YTNo720 addObject:videoID];
@@ -2149,7 +2442,7 @@ static void YTServe(int client) {
         }
     }
     if (muxed.length) {
-        YTLog([NSString stringWithFormat:@"serve 720 %@ %@", videoID, range ?: @"-"]);
+        YTLog([NSString stringWithFormat:@"serve hi%@ %@ %@", YTStreamURL(videoID, @"hih") ?: @"", videoID, range ?: @"-"]);
         YTServeFile(client, muxed, range, [method isEqualToString:@"HEAD"]);
         return;
     }

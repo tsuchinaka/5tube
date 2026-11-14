@@ -60,7 +60,7 @@
 			<key>label</key>
 			<string>Playback</string>
 			<key>footerText</key>
-			<string>720p30 is H.264 Main Profile level 3.1. This iPhone plays it on Wi-Fi and cellular. 720p60 is not available on this chip.</string>
+			<string>720p30 H.264, highest bitrate the A4 can decode. No 720p30 encode falls back to 480p, then 360p. 1080p and 60fps are not played on this chip.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -172,7 +172,7 @@
 			<key>key</key>
 			<string>accountHome</string>
 			<key>label</key>
-			<string>Account home</string>
+			<string>Recommendations</string>
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
@@ -198,7 +198,7 @@
 			<key>label</key>
 			<string>Extras</string>
 			<key>footerText</key>
-			<string>Comments can be posted after sign-in. Home uses subscriptions when signed in. History loads your YouTube history.</string>
+			<string>Featured shows your recommendations when signed in, or most viewed this week when signed out. History and My Videos use the account.</string>
 		</dict>
 		<dict>
 			<key>cell</key>
