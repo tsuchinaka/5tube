@@ -250,7 +250,7 @@ static id YTPostMode(NSString *method, NSDictionary *body, int mode) {
     if (mode == 2) agent = @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     else if (authed) agent = @"Mozilla/5.0 (AppleTV; CPU OS 9_0 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Mobile/13T534YI";
     [request setValue:agent forHTTPHeaderField:@"User-Agent"];
-    NSString *token = (authed || [method isEqualToString:@"player"]) ? YTAuthAccess() : nil;
+    NSString *token = authed ? YTAuthAccess() : nil;
     if (token.length) [request setValue:[NSString stringWithFormat:@"Bearer %@", token] forHTTPHeaderField:@"Authorization"];
     [NSURLProtocol setProperty:[NSNumber numberWithBool:YES] forKey:YTMark inRequest:request];
     NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithDictionary:body ?: [NSDictionary dictionary]];
