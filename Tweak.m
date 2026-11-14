@@ -48,7 +48,7 @@ static void YTLog(NSString *line) {
     [YTLogLock unlock];
 }
 
-static NSString *const YTPrefsID = @"com.bytebox.youtubeinnertube";
+static NSString *const YTPrefsID = @"com.sokubit.5tube";
 
 static void YTSyncPrefs(void) {
     CFPreferencesAppSynchronize((__bridge CFStringRef)YTPrefsID);
@@ -1432,7 +1432,7 @@ static void YTFinishLoad(id self, NSURL *url, NSData *body) {
         YTLog([NSString stringWithFormat:@"load delivered %u", (unsigned)[body length]]);
     } @catch (NSException *exception) {
         YTWriteCrash([NSString stringWithFormat:@"parse %@\n%@\n%@", exception.name, exception.reason, [[exception callStackSymbols] componentsJoinedByString:@"\n"]]);
-        @try { [self connection:nil didFailWithError:[NSError errorWithDomain:@"YouTubeInnerTube" code:2 userInfo:nil]]; }
+        @try { [self connection:nil didFailWithError:[NSError errorWithDomain:@"com.sokubit.5tube" code:2 userInfo:nil]]; }
         @catch (NSException *ignored) {}
     }
 }
@@ -1698,7 +1698,7 @@ static void YTHookPostComment(id self, SEL cmd, id text, id video) {
         ok = [json isKindOfClass:[NSDictionary class]] && ![json objectForKey:@"error"];
         YTLog([NSString stringWithFormat:@"comment web %@", ok ? @"ok" : @"fail"]);
     }
-    YTFinishPostError(self, 5, ok ? nil : [NSError errorWithDomain:@"YouTubeInnerTube" code:1 userInfo:nil]);
+    YTFinishPostError(self, 5, ok ? nil : [NSError errorWithDomain:@"com.sokubit.5tube" code:1 userInfo:nil]);
     YTLog([NSString stringWithFormat:@"comment %@ %@", vid ?: @"-", ok ? @"ok" : @"fail"]);
 }
 
@@ -2260,7 +2260,7 @@ static void YTLoad(void) {
     YTNo720 = [NSMutableSet set];
     YTInstallCrashHandler();
     YTAuthInstall();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTPrefsChanged, CFSTR("com.bytebox.youtubeinnertube/reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTPrefsChanged, CFSTR("com.sokubit.5tube/reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     YTStartProxy();
     [NSURLProtocol registerClass:[YTInnerProtocol class]];
     Class connection = [NSURLConnection class];

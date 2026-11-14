@@ -4,11 +4,11 @@ FINALPACKAGE = 1
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = YouTubeInnerTube
-YouTubeInnerTube_FILES = Tweak.m YTMux.m YTAuth.m
-YouTubeInnerTube_FRAMEWORKS = Foundation UIKit
-YouTubeInnerTube_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
-YouTubeInnerTube_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
+TWEAK_NAME = 5Tube
+5Tube_FILES = Tweak.m YTMux.m YTAuth.m
+5Tube_FRAMEWORKS = Foundation UIKit
+5Tube_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
+5Tube_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 

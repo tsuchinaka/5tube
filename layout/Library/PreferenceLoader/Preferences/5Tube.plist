@@ -5,7 +5,7 @@
 	<key>entry</key>
 	<dict>
 		<key>bundle</key>
-		<string>YouTubeInnerTubePrefs</string>
+		<string>5TubePrefs</string>
 		<key>cell</key>
 		<string>PSLinkCell</string>
 		<key>detail</key>
@@ -13,7 +13,7 @@
 		<key>isController</key>
 		<true/>
 		<key>label</key>
-		<string>YouTube InnerTube</string>
+		<string>5Tube</string>
 	</dict>
 </dict>
 </plist>

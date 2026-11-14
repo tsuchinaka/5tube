@@ -1,8 +1,8 @@
-# YouTubeInnerTube
+# 5Tube
 
 Tweak for the stock iOS 5.1 YouTube app. GData is dead, so this answers those feeds with Atom built from InnerTube. The stock screens stay.
 
-Package: `com.bytebox.youtubeinnertube`
+Package: `com.sokubit.5tube`
 
 ## Build
 

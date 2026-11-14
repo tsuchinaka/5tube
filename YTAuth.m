@@ -6,7 +6,7 @@
 @interface YTCodeDelegate : NSObject <UIAlertViewDelegate>
 @end
 
-static NSString *const YTAuthPrefs = @"com.bytebox.youtubeinnertube";
+static NSString *const YTAuthPrefs = @"com.sokubit.5tube";
 static NSString *const YTAuthClient = @"861556708454-d6dlm3lh05idd8npek18k6be8ba3oc68.apps.googleusercontent.com";
 static NSString *const YTAuthSecret = @"SboVhoG9s0rNafixCSGGKXAT";
 static NSString *const YTAuthScope = @"https://www.googleapis.com/auth/youtube";
@@ -576,8 +576,8 @@ void YTAuthInstall(void) {
     }
     if (done) return;
     done = YES;
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTLoginNote, CFSTR("com.bytebox.youtubeinnertube/login"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTSignOutNote, CFSTR("com.bytebox.youtubeinnertube/signout"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTLoginNote, CFSTR("com.sokubit.5tube/login"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTSignOutNote, CFSTR("com.sokubit.5tube/signout"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     if (YTAuthFlag(@"wantLogin")) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             YTAuthBegin();

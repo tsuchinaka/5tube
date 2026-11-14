@@ -1,5 +1,5 @@
-Package: com.bytebox.youtubeinnertube
-Name: YouTube InnerTube
+Package: com.sokubit.5tube
+Name: 5Tube
 Depends: mobilesubstrate
 Version: 0.1.25
 Architecture: iphoneos-arm

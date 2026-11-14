@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>title</key>
-	<string>YouTube InnerTube</string>
+	<string>5Tube</string>
 	<key>items</key>
 	<array>
 		<dict>
@@ -20,7 +20,7 @@
 			<key>label</key>
 			<string>Status</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>loginState</string>
 			<key>default</key>
@@ -32,7 +32,7 @@
 			<key>label</key>
 			<string>Code</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>userCode</string>
 			<key>default</key>
@@ -68,7 +68,7 @@
 			<key>detail</key>
 			<string>PSListItemsController</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>quality</string>
 			<key>label</key>
@@ -86,13 +86,13 @@
 				<string>720</string>
 			</array>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>cellular720</string>
 			<key>label</key>
@@ -100,13 +100,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>fallback360</string>
 			<key>label</key>
@@ -114,7 +114,7 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -126,7 +126,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>hideShorts</string>
 			<key>label</key>
@@ -134,13 +134,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>realChannels</string>
 			<key>label</key>
@@ -148,13 +148,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>paging</string>
 			<key>label</key>
@@ -162,13 +162,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>accountHome</string>
 			<key>label</key>
@@ -176,13 +176,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>accountHistory</string>
 			<key>label</key>
@@ -190,7 +190,7 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -204,7 +204,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>comments</string>
 			<key>label</key>
@@ -212,13 +212,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>captions</string>
 			<key>label</key>
@@ -226,13 +226,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>suggestions</string>
 			<key>label</key>
@@ -240,13 +240,13 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 		<dict>
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>defaults</key>
-			<string>com.bytebox.youtubeinnertube</string>
+			<string>com.sokubit.5tube</string>
 			<key>key</key>
 			<string>ageBypass</string>
 			<key>label</key>
@@ -254,7 +254,7 @@
 			<key>default</key>
 			<true/>
 			<key>PostNotification</key>
-			<string>com.bytebox.youtubeinnertube/reload</string>
+			<string>com.sokubit.5tube/reload</string>
 		</dict>
 	</array>
 </dict>
