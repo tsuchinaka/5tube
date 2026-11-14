@@ -2053,15 +2053,6 @@ static void YTStoreIvar(id obj, NSString *name, id value) {
     object_setIvar(obj, ivar, value);
 }
 
-static NSMutableArray *YTKeptRequests;
-
-static void YTKeepRequest(id request) {
-    if (!request) return;
-    if (!YTKeptRequests) YTKeptRequests = [NSMutableArray array];
-    [YTKeptRequests addObject:request];
-    if ([YTKeptRequests count] > 6) [YTKeptRequests removeObjectAtIndex:0];
-}
-
 static BOOL YTCanTakeSearch(id source) {
     return [source respondsToSelector:@selector(searchRequest:receivedVideos:startIndex:videosRemaining:)];
 }
@@ -2071,7 +2062,10 @@ static void YTLoadAccountFeed(id source, NSString *urlString, NSString *label) {
     Class cls = NSClassFromString(@"YTSearchRequest");
     if (!cls) return;
     id request = [[cls alloc] init];
-    YTKeepRequest(request);
+    // The feed request keeps its delegate unretained. Hold the data source for
+    // as long as the request lives, so a closed screen is not messaged after
+    // its memory has been reused as an NSData or an NSString.
+    objc_setAssociatedObject(request, "YTSearchDelegate", source, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if ([request respondsToSelector:@selector(setDelegate:)])
         ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(setDelegate:), source);
     if ([request respondsToSelector:@selector(loadRequest:)])

@@ -9,10 +9,10 @@ static NSString *const YTPrefsDomain = @"com.sokubit.5tube";
 @implementation YTPrefsController
 
 - (NSArray *)specifiers {
-    if (!self.specifiers) {
-        self.specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
+    if (!_specifiers) {
+        _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     }
-    return self.specifiers;
+    return _specifiers;
 }
 
 - (void)signIn {
