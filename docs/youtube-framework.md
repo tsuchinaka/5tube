@@ -203,7 +203,9 @@ El proxy local sirve por HTTP con Range.
 ## Zonas peligrosas
 
 - `YTSearchRequest`: el delegado es `assign`. Si la pantalla muere, la petición
-  le habla a memoria liberada. Retener el data source mientras vive la petición.
+  le habla a memoria liberada. El tweak retiene el delegado en `YTStartLoad` y lo
+  suelta en `YTFinishLoad`; sin eso, las filas de suscripción que se reciclan
+  tumban la app con `KERN_INVALID_ADDRESS` en `didParseData`.
 - `YTVideoDataSource`: `_videos`, `_history`, `_searchRequest`. Escribir ivars a
   mano corrompe el data source. Usar `_clearVideos` y dejar que el parser llene.
 - `XMLSAXHTTPRequest`: el parseo termina en el hilo principal. Un feed grande

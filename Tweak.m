@@ -2056,11 +2056,18 @@ static void YTInstallCrashHandler(void) {
     sigaction(SIGILL, &action, NULL);
 }
 
+static id YTPSDelegate(id request);
+
+static void YTReleaseFeedDelegate(id self) {
+    objc_setAssociatedObject(self, "YTFeedDelegate", nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static void YTFinishLoad(id self, NSURL *url, NSData *body) {
     YTLog([NSString stringWithFormat:@"load back %u %@", (unsigned)[body length], NSStringFromClass([self class])]);
     if (![body length] || !url) {
         NSError *error = [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCannotConnectToHost userInfo:nil];
         @try { [self connection:nil didFailWithError:error]; } @catch (NSException *exception) { YTWriteCrash(exception.reason); }
+        YTReleaseFeedDelegate(self);
         return;
     }
     NSHTTPURLResponse *response = [[NSHTTPURLResponse alloc] initWithURL:url
@@ -2079,12 +2086,17 @@ static void YTFinishLoad(id self, NSURL *url, NSData *body) {
         @try { [self connection:nil didFailWithError:[NSError errorWithDomain:@"com.sokubit.5tube" code:2 userInfo:nil]]; }
         @catch (NSException *ignored) {}
     }
+    YTReleaseFeedDelegate(self);
 }
 
 static void YTStartLoad(id self, id request) {
     YTAuthDidLoad = YES;
     NSURL *url = [request respondsToSelector:@selector(URL)] ? [request URL] : nil;
     YTLog([NSString stringWithFormat:@"loadRequest %@ %@", NSStringFromClass([self class]), [url absoluteString]]);
+    // The feed request keeps its delegate unretained. A screen can close while
+    // the answer is coming back; without this the parser messages freed memory.
+    id delegate = YTPSDelegate(self);
+    if (delegate) objc_setAssociatedObject(self, "YTFeedDelegate", delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if ([self respondsToSelector:@selector(_startedLoading)]) [self performSelector:@selector(_startedLoading)];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSData *body = nil;
