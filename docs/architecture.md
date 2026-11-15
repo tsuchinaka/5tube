@@ -49,6 +49,8 @@ Los headers no se incluyen entre sí: `5Tube.h` los importa en orden y cada
 1. `YTFeed` arma la entrada con `YTPlayURL`.
 2. `YTPlayer` pide `player` a InnerTube y elige el mejor H.264 compatible.
 3. El proxy sirve `/<id>.mp4` con Range y remuxea video + audio con `YTMux`.
+   Para videos de 1h o más, sirve el progresivo 360 al instante y no espera al
+   remux (`longVideoFast`).
 4. Para un directo, `YTEntry` apunta a `/live/<id>.m3u8`; el proxy pide el
    `player`, cachea el HLS y sirve solo variantes de 720p30 o menos.
 5. `YTCaptions` baja el track firmado y pinta los cues sobre el player.

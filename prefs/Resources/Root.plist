@@ -118,6 +118,20 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>defaults</key>
+			<string>com.sokubit.5tube</string>
+			<key>key</key>
+			<string>longVideoFast</string>
+			<key>label</key>
+			<string>Fast start for 1h+ videos</string>
+			<key>default</key>
+			<true/>
+			<key>PostNotification</key>
+			<string>com.sokubit.5tube/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>Lists</string>

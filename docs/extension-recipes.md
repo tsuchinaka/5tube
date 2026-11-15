@@ -160,6 +160,11 @@ Para cambiar el formato:
 
 No mandar 720p60 ni 1080p al A4: el decodificador los rechaza.
 
+Videos de 1h o más: el remux de 720 tarda minutos y supera el límite de
+110 MB. `longVideoFast` sirve el progresivo 360 en el primer Range y deja que
+el player haga buffering. El 720 se usa en cortos o si el `.mp4` ya está en
+`/var/tmp`.
+
 ## 7. Modelo YTVideo
 
 Estado: lectura hecha; escritura solo a través de acciones.

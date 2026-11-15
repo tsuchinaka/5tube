@@ -338,6 +338,19 @@ void YTServeFile(int client, NSString *path, NSString *range, BOOL head) {
     }
 }
 
+static NSInteger YTVideoSeconds(NSString *videoID) {
+    [YTCacheLock lock];
+    NSNumber *seconds = [YTDurationCache objectForKey:videoID];
+    [YTCacheLock unlock];
+    return [seconds integerValue];
+}
+
+static BOOL YTHasMux720(NSString *videoID) {
+    NSString *path = [NSString stringWithFormat:@"/var/tmp/yt720-%@.mp4", videoID];
+    NSDictionary *info = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:NULL];
+    return [[info objectForKey:NSFileSize] unsignedLongLongValue] > 1024;
+}
+
 void YTServe(int client) {
     char buffer[4096];
     size_t used = 0;
@@ -460,13 +473,16 @@ void YTServe(int client) {
     BOOL skip720 = [YTNo720 containsObject:videoID];
     [YTCacheLock unlock];
     NSString *muxed = nil;
-    if (!skip720) {
+    BOOL longFast = YTPrefBool(@"longVideoFast", YES) && YTVideoSeconds(videoID) >= 3600 && !YTHasMux720(videoID);
+    if (!skip720 && !longFast) {
         muxed = YTEnsure720(videoID, YTStreamURL(videoID, @"hi"), YTStreamURL(videoID, @"au"));
         if (!muxed.length) {
             [YTCacheLock lock];
             [YTNo720 addObject:videoID];
             [YTCacheLock unlock];
         }
+    } else if (!skip720 && longFast) {
+        YTLog([NSString stringWithFormat:@"long fast 360 %@", videoID]);
     }
     if (muxed.length) {
         YTLog([NSString stringWithFormat:@"serve hi%@ %@ %@", YTStreamURL(videoID, @"hih") ?: @"", videoID, range ?: @"-"]);
