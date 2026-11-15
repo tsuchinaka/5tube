@@ -128,20 +128,6 @@
 			<key>defaults</key>
 			<string>com.sokubit.5tube</string>
 			<key>key</key>
-			<string>hideShorts</string>
-			<key>label</key>
-			<string>Hide Shorts</string>
-			<key>default</key>
-			<true/>
-			<key>PostNotification</key>
-			<string>com.sokubit.5tube/reload</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>defaults</key>
-			<string>com.sokubit.5tube</string>
-			<key>key</key>
 			<string>realChannels</string>
 			<key>label</key>
 			<string>Real channel uploads</string>

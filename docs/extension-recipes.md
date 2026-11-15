@@ -230,6 +230,17 @@ El tweak:
 Riesgo: el feed de captions puede tumbar el parser de la app si el formato no
 coincide. Por eso `captionOverlay` va apagado por defecto.
 
+## 10. Shorts
+
+Estado: sin soporte. No hay interruptor.
+
+`YTIsShortNode` filtra `reelItemRenderer`, `reelWatchEndpoint`,
+`shortsLockupViewModel`, URLs `/shorts/`, el badge `SHORTS` y
+`TILE_CONTENT_TYPE_SHORT`. Se aplica en `YTCollect` (búsqueda, related,
+canales, más vistos) y en `YTCollectTiles` (historial, playlists, suscripciones).
+`YTDetails` sigue pudiendo abrir un video por ID; no hay lista que entregue un
+short.
+
 ## Resumen
 
 | Capacidad | Estado |

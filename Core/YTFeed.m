@@ -11,6 +11,7 @@ BOOL YTIsShortNode(id node, int depth) {
         NSString *text = node;
         if ([text rangeOfString:@"/shorts/"].location != NSNotFound) return YES;
         if ([text isEqualToString:@"SHORTS"]) return YES;
+        if ([text isEqualToString:@"TILE_CONTENT_TYPE_SHORT"]) return YES;
         return NO;
     }
     if ([node isKindOfClass:[NSArray class]]) {
@@ -40,11 +41,11 @@ void YTCollect(id node, NSMutableArray *out, NSMutableSet *seen) {
     if (!title) title = YTGet(node, @"headline");
     if ([videoID isKindOfClass:[NSString class]] && [(NSString *)videoID length] == 11 && title) {
         if ([seen containsObject:videoID]) return;
-        [seen addObject:videoID];
-        if (YTPrefBool(@"hideShorts", YES) && YTIsShortNode(node, 0)) {
+        if (YTIsShortNode(node, 0)) {
             YTLog([NSString stringWithFormat:@"skip short %@", videoID]);
             return;
         }
+        [seen addObject:videoID];
         NSMutableDictionary *item = [NSMutableDictionary dictionary];
         YTSet(item, @"id", videoID);
         YTSet(item, @"title", YTText(title));
@@ -503,6 +504,10 @@ void YTCollectTiles(id node, NSMutableArray *videos, NSMutableArray *playlists, 
         BOOL playlist = [kind isEqualToString:@"TILE_CONTENT_TYPE_PLAYLIST"] || [browse hasPrefix:@"VL"] || [cid isEqualToString:@"LL"] || [cid isEqualToString:@"WL"];
         if ([cid isKindOfClass:[NSString class]] && cid.length && ![seen containsObject:cid]) {
             if (!playlist && YTIsVideoID(cid)) {
+                if (YTIsShortNode(tile, 0)) {
+                    YTLog([NSString stringWithFormat:@"skip short %@", cid]);
+                    return;
+                }
                 [seen addObject:cid];
                 NSMutableDictionary *item = YTVideoItem(cid, title, author, subtitle, 0, @"0");
                 if (item && videos) [videos addObject:item];

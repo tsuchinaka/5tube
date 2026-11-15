@@ -1,7 +1,7 @@
 Package: com.sokubit.5tube
 Name: 5Tube
 Depends: mobilesubstrate
-Version: 0.2.0
+Version: 0.2.1
 Architecture: iphoneos-arm
 Description: Replaces the dead GData feeds in the iOS 5.1 YouTube app with InnerTube.
 Maintainer: tsu
