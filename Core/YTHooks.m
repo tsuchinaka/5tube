@@ -278,6 +278,7 @@ void YTHookFeedFail(id self, SEL cmd, id error) {
 void YTHookFeedParse(id self, SEL cmd) {
     YTLog([NSString stringWithFormat:@"parsed %@", NSStringFromClass([self class])]);
     YTOrigFeedParse(self, cmd);
+    YTFixVideosInSource(YTPSDelegate(self));
 }
 
 void YTHookSAX(void) {

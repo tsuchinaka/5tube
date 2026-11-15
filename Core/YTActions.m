@@ -34,6 +34,54 @@ static id YTHookCommentsRequestInit(id self, SEL cmd, id video, id delegate) {
     return YTOrigCommentsRequestInit ? YTOrigCommentsRequestInit(self, cmd, video, delegate) : nil;
 }
 
+static Ivar YTFindIvar(id object, NSString *name) {
+    Class cls = [object class];
+    while (cls) {
+        Ivar ivar = class_getInstanceVariable(cls, [name UTF8String]);
+        if (ivar) return ivar;
+        cls = class_getSuperclass(cls);
+    }
+    return NULL;
+}
+
+static void YTSetFlagIvar(id object, Ivar ivar) {
+    if (!ivar) return;
+    const char *type = ivar_getTypeEncoding(ivar);
+    if (!type) return;
+    if (type[0] == '@') {
+        objc_setAssociatedObject(object, ivar, [NSNumber numberWithBool:YES], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        object_setIvar(object, ivar, [NSNumber numberWithBool:YES]);
+    } else {
+        *(BOOL *)((char *)(__bridge void *)object + ivar_getOffset(ivar)) = YES;
+    }
+}
+
+void YTFixVideoObject(id video) {
+    if (!video) return;
+    NSString *vid = YTVideoToken(video);
+    if (!vid.length) return;
+    Ivar comments = YTFindIvar(video, @"_commentsURL");
+    if (comments && !object_getIvar(video, comments)) {
+        NSString *text = [NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/videos/%@/comments", vid];
+        const char *type = ivar_getTypeEncoding(comments);
+        id value = (type && strstr(type, "NSURL")) ? [NSURL URLWithString:text] : text;
+        objc_setAssociatedObject(video, comments, value, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        object_setIvar(video, comments, value);
+        YTLog([NSString stringWithFormat:@"fixed comments %@", vid]);
+    }
+    YTSetFlagIvar(video, YTFindIvar(video, @"_allowComments"));
+    YTSetFlagIvar(video, YTFindIvar(video, @"_allowRating"));
+}
+
+void YTFixVideosInSource(id source) {
+    if (!source) return;
+    Ivar ivar = YTFindIvar(source, @"_videos");
+    if (!ivar) return;
+    id videos = object_getIvar(source, ivar);
+    if (![videos isKindOfClass:[NSArray class]]) return;
+    for (id video in videos) YTFixVideoObject(video);
+}
+
 void YTVideoPermissionsInstall(void) {
     Class video = NSClassFromString(@"YTVideo");
     YTHookMethod(video, @"allowComments", (IMP)YTHookAllowComments, NULL);
