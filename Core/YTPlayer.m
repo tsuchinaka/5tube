@@ -14,6 +14,100 @@ NSMutableDictionary *YTPlayCache;
 NSMutableDictionary *YTDurationCache;
 NSMutableSet *YTNo720;
 int YTProxyPort;
+NSMutableDictionary *YTHLSCache;
+
+static double YTHLSExpiry(NSString *url) {
+    NSRange mark = [url rangeOfString:@"expire/"];
+    if (mark.location == NSNotFound) return 0;
+    NSString *rest = [url substringFromIndex:mark.location + mark.length];
+    NSRange slash = [rest rangeOfString:@"/"];
+    if (slash.location != NSNotFound) rest = [rest substringToIndex:slash.location];
+    return [rest doubleValue];
+}
+
+void YTHLSSave(NSString *videoID, NSString *url) {
+    if (!videoID.length || ![url isKindOfClass:[NSString class]] || !url.length) return;
+    [YTCacheLock lock];
+    if (!YTHLSCache) YTHLSCache = [NSMutableDictionary dictionary];
+    NSDictionary *entry = [NSDictionary dictionaryWithObjectsAndKeys:
+                           url, @"url",
+                           [NSNumber numberWithDouble:YTHLSExpiry(url)], @"expiry", nil];
+    [YTHLSCache setObject:entry forKey:videoID];
+    [YTCacheLock unlock];
+}
+
+NSString *YTHLSURL(NSString *videoID) {
+    if (!videoID.length) return nil;
+    [YTCacheLock lock];
+    NSDictionary *entry = [YTHLSCache objectForKey:videoID];
+    [YTCacheLock unlock];
+    if (![entry isKindOfClass:[NSDictionary class]]) return nil;
+    double expiry = [[entry objectForKey:@"expiry"] doubleValue];
+    if (expiry > 0 && expiry - [[NSDate date] timeIntervalSince1970] < 600) {
+        [YTCacheLock lock];
+        [YTHLSCache removeObjectForKey:videoID];
+        [YTCacheLock unlock];
+        return nil;
+    }
+    return [entry objectForKey:@"url"];
+}
+
+NSString *YTHLSFor(NSString *videoID) {
+    if (!videoID.length) return nil;
+    NSString *cached = YTHLSURL(videoID);
+    if (cached.length) return cached;
+    id json = YTPost(@"player", [NSDictionary dictionaryWithObjectsAndKeys:
+                                 videoID, @"videoId",
+                                 [NSNumber numberWithBool:YES], @"contentCheckOk",
+                                 [NSNumber numberWithBool:YES], @"racyCheckOk",
+                                 nil]);
+    NSString *hls = YTGet(YTGet(json, @"streamingData"), @"hlsManifestUrl");
+    if ([hls isKindOfClass:[NSString class]] && hls.length) YTHLSSave(videoID, hls);
+    return ([hls isKindOfClass:[NSString class]] && hls.length) ? hls : nil;
+}
+
+NSString *YTLocalLiveURL(NSString *videoID) {
+    if (!videoID.length) return nil;
+    return [NSString stringWithFormat:@"http://127.0.0.1:%d/live/%@.m3u8", YTProxyPort, videoID];
+}
+
+NSData *YTLiveMaster(NSData *master) {
+    NSString *text = master.length ? [[NSString alloc] initWithData:master encoding:NSUTF8StringEncoding] : nil;
+    if (!text.length) return master;
+    NSMutableString *out = [NSMutableString string];
+    BOOL skipNext = NO;
+    BOOL kept = NO;
+    for (NSString *line in [text componentsSeparatedByString:@"\n"]) {
+        if ([line hasPrefix:@"#EXT-X-STREAM-INF:"]) {
+            int height = 0;
+            int fps = 0;
+            NSRange res = [line rangeOfString:@"RESOLUTION="];
+            if (res.location != NSNotFound) {
+                NSString *rest = [line substringFromIndex:res.location + res.length];
+                NSRange x = [rest rangeOfString:@"x"];
+                if (x.location != NSNotFound) height = [[rest substringFromIndex:x.location + 1] intValue];
+            }
+            NSRange fr = [line rangeOfString:@"FRAME-RATE="];
+            if (fr.location != NSNotFound) fps = (int)[[line substringFromIndex:fr.location + fr.length] doubleValue];
+            skipNext = height > 720 || fps > 30;
+            if (!skipNext) {
+                [out appendString:line];
+                [out appendString:@"\n"];
+                kept = YES;
+            }
+            continue;
+        }
+        if (skipNext && line.length && ![line hasPrefix:@"#"]) {
+            skipNext = NO;
+            continue;
+        }
+        [out appendString:line];
+        [out appendString:@"\n"];
+    }
+    if (!kept) return master;
+    return [out dataUsingEncoding:NSUTF8StringEncoding];
+}
+
 NSString *YTLocalPlayURL(NSString *videoID, BOOL high) {
     if (high) return [NSString stringWithFormat:@"http://127.0.0.1:%d/%@.mp4", YTProxyPort, videoID];
     return [NSString stringWithFormat:@"http://127.0.0.1:%d/%@.360.mp4", YTProxyPort, videoID];
@@ -89,6 +183,8 @@ NSString *YTFetchUpstream(NSString *videoID) {
                                  [NSNumber numberWithBool:YES], @"contentCheckOk",
                                  [NSNumber numberWithBool:YES], @"racyCheckOk",
                                  nil]);
+    id hls = YTGet(YTGet(json, @"streamingData"), @"hlsManifestUrl");
+    if ([hls isKindOfClass:[NSString class]] && [hls length]) YTHLSSave(videoID, hls);
     NSMutableDictionary *streams = [NSMutableDictionary dictionary];
     NSMutableArray *formats = [NSMutableArray array];
     id lists = [NSArray arrayWithObjects:YTGet(YTGet(json, @"streamingData"), @"formats"), YTGet(YTGet(json, @"streamingData"), @"adaptiveFormats"), nil];
@@ -239,6 +335,23 @@ void YTServe(int client) {
     if (parts.count < 2) return;
     NSString *method = [parts objectAtIndex:0];
     NSString *rawPath = [parts objectAtIndex:1];
+    if ([rawPath rangeOfString:@"/live/"].location == 0) {
+        NSString *name = [[rawPath lastPathComponent] stringByDeletingPathExtension];
+        NSString *vid = YTIsVideoID(name) ? name : @"";
+        NSString *hls = vid.length ? YTHLSFor(vid) : nil;
+        NSData *master = hls.length ? YTGET(hls) : nil;
+        NSData *body = master.length ? YTLiveMaster(master) : nil;
+        if (!body.length) {
+            NSString *miss = @"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            YTWriteAll(client, [miss UTF8String], [miss length]);
+            return;
+        }
+        NSString *headText = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: %u\r\nConnection: close\r\n\r\n", (unsigned)[body length]];
+        YTWriteAll(client, [headText UTF8String], [headText length]);
+        if (![method isEqualToString:@"HEAD"]) YTWriteAll(client, [body bytes], [body length]);
+        YTLog([NSString stringWithFormat:@"live master %@ %u", vid, (unsigned)[body length]]);
+        return;
+    }
     if ([rawPath rangeOfString:@"/icon?"].location == 0) {
         NSString *remote = nil;
         NSRange query = [rawPath rangeOfString:@"u="];

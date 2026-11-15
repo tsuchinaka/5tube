@@ -1,5 +1,10 @@
 # Plan: livestreams en 5Tube
 
+Estado: implementado en 0.2.2. Gate AVPlayer superado. El proxy
+`/live/<id>.m3u8` pide el `player`, cachea el HLS y deja solo variantes de
+720p30 o menos. Probado con ABC (720p30), NBC (1080p filtrado) y FOX (720p60
+filtrado). Falta la prueba visual dentro de la app.
+
 Objetivo: abrir un directo desde la app stock, reproducirlo con audio y video,
 y que las listas no se rompan. Chat, donaciones y encuestas quedan fuera: la
 app no tiene UI para eso.
@@ -89,8 +94,9 @@ El item gana dos claves:
 - `media:player` con la URL del manifiesto.
 - Título con prefijo `● LIVE ` para que la celda lo muestre sin tocar UIKit.
 
-No usar `127.0.0.1:8765` para live en la primera versión: el player recibe el
-manifiesto firmado directamente.
+Se usa `127.0.0.1:8765/live/<id>.m3u8`: el proxy pide el `player`, cachea el
+manifiesto firmado y lo sirve filtrado. Así el player recibe un HLS local, la
+URL se refresca al expirar y se descartan las variantes que el A4 no aguanta.
 
 ### 3. Player
 
@@ -214,6 +220,18 @@ Si falla: parar y replantear con proxy de manifiesto o segmentos. No seguir.
 - Fase 3: 1 sesión.
 - Fase 4-5: 1 sesión.
 - Total: 4-5 sesiones con prueba en dispositivo.
+
+## Implementado
+
+- `YTIsLiveNode` detecta `isLiveNow`, `BADGE_STYLE_TYPE_LIVE_NOW` y `LIVE`.
+- `YTCollect` y `YTCollectTiles` marcan `live` y prefijan `● LIVE`.
+- `YTDetails` lee `isLive`, `hlsManifestUrl` y descarta `licenseInfos`.
+- `YTEntry` usa `/live/<id>.m3u8` para live y deja el proxy MP4 para VOD.
+- `YTHLSFor` cachea el manifiesto y lo renueva si le quedan menos de 10 min.
+- `YTLiveMaster` elimina variantes de más de 720p o más de 30 fps.
+- `YTFixTime` convierte `nan`/`inf` en 0 para no romper la duración.
+- Validado: el proxy devuelve 200; `hlstest` reproduce el manifiesto del proxy
+  y el tiempo avanza; los masters de NBC y FOX salen sin 1080p ni 60 fps.
 
 ## Definición de 100%
 

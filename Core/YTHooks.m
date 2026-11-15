@@ -348,6 +348,7 @@ double YTKnownDuration(id player) {
 
 double YTFixTime(id self, double (*orig)(id, SEL), SEL cmd) {
     double value = orig ? orig(self, cmd) : 0;
+    if (isnan(value) || isinf(value)) return 0;
     if (value > 0.5 && value < 86400.0 * 12.0) return value;
     double known = YTKnownDuration(self);
     return known > 0.5 ? known : value;

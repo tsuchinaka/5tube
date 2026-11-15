@@ -30,6 +30,35 @@ BOOL YTIsShortNode(id node, int depth) {
     return NO;
 }
 
+BOOL YTIsLiveNode(id node, int depth) {
+    if (!node || depth > 8) return NO;
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        id live = YTGet(node, @"isLiveNow");
+        if ([live respondsToSelector:@selector(boolValue)] && [live boolValue]) return YES;
+        id badges = YTGet(node, @"badges");
+        if ([badges isKindOfClass:[NSArray class]]) {
+            for (id badge in badges) {
+                id renderer = YTGet(badge, @"metadataBadgeRenderer");
+                NSString *label = YTText(YTGet(renderer, @"label"));
+                NSString *style = YTGet(renderer, @"style");
+                if ([label isEqualToString:@"LIVE"] || [style isEqualToString:@"BADGE_STYLE_TYPE_LIVE_NOW"]) return YES;
+            }
+        }
+        for (id child in [node allValues]) if (YTIsLiveNode(child, depth + 1)) return YES;
+        return NO;
+    }
+    if ([node isKindOfClass:[NSArray class]]) {
+        for (id child in node) if (YTIsLiveNode(child, depth + 1)) return YES;
+    }
+    return NO;
+}
+
+NSString *YTMarkLive(NSString *title) {
+    if (!title.length) return @"● LIVE";
+    if ([title hasPrefix:@"● LIVE"]) return title;
+    return [@"● LIVE " stringByAppendingString:title];
+}
+
 void YTCollect(id node, NSMutableArray *out, NSMutableSet *seen) {
     if ([node isKindOfClass:[NSArray class]]) {
         for (id child in (NSArray *)node) YTCollect(child, out, seen);
@@ -46,13 +75,15 @@ void YTCollect(id node, NSMutableArray *out, NSMutableSet *seen) {
             return;
         }
         [seen addObject:videoID];
+        BOOL live = YTIsLiveNode(node, 0);
         NSMutableDictionary *item = [NSMutableDictionary dictionary];
         YTSet(item, @"id", videoID);
-        YTSet(item, @"title", YTText(title));
+        YTSet(item, @"title", live ? YTMarkLive(YTText(title)) : YTText(title));
         YTSet(item, @"author", YTText(YTGet(node, @"longBylineText") ?: YTGet(node, @"shortBylineText") ?: YTGet(node, @"ownerText")));
-        YTSet(item, @"length", YTText(YTGet(node, @"lengthText")));
+        YTSet(item, @"length", live ? @"0" : YTText(YTGet(node, @"lengthText")));
         YTSet(item, @"views", YTText(YTGet(node, @"viewCountText") ?: YTGet(node, @"shortViewCountText")));
-        YTSet(item, @"published", YTText(YTGet(node, @"publishedTimeText")));
+        YTSet(item, @"published", live ? @"LIVE" : YTText(YTGet(node, @"publishedTimeText")));
+        if (live) YTSet(item, @"live", [NSNumber numberWithBool:YES]);
         [out addObject:item];
         return;
     }
@@ -71,23 +102,43 @@ NSDictionary *YTDetails(NSString *videoID) {
                                  [NSNumber numberWithBool:YES], @"contentCheckOk",
                                  [NSNumber numberWithBool:YES], @"racyCheckOk",
                                  nil]);
+    id status = YTGet(YTGet(json, @"playabilityStatus"), @"status");
+    if (![status isEqualToString:@"OK"]) return nil;
+    id streaming = YTGet(json, @"streamingData");
+    id license = YTGet(streaming, @"licenseInfos");
+    if ([license isKindOfClass:[NSArray class]] && [license count]) return nil;
     NSDictionary *details = YTGet(json, @"videoDetails");
     if (![details isKindOfClass:[NSDictionary class]]) return nil;
+    BOOL live = [[YTGet(details, @"isLive") description] boolValue] ||
+                [[YTGet(details, @"isLiveContent") description] boolValue];
+    NSString *hls = YTGet(streaming, @"hlsManifestUrl");
+    if (![hls isKindOfClass:[NSString class]]) hls = nil;
     NSMutableDictionary *item = [NSMutableDictionary dictionary];
     YTSet(item, @"id", videoID);
     id title = YTGet(details, @"title");
-    YTSet(item, @"title", [title isKindOfClass:[NSString class]] ? title : @"Video");
+    NSString *titleText = [title isKindOfClass:[NSString class]] ? title : @"Video";
+    YTSet(item, @"title", live ? YTMarkLive(titleText) : titleText);
     id author = YTGet(details, @"author");
     YTSet(item, @"author", [author isKindOfClass:[NSString class]] ? author : @"");
     id views = YTGet(details, @"viewCount");
     YTSet(item, @"views", [views isKindOfClass:[NSString class]] ? views : @"0");
     id length = YTGet(details, @"lengthSeconds");
-    YTSet(item, @"length", [length isKindOfClass:[NSString class]] ? length : @"0");
+    YTSet(item, @"length", live ? @"0" : ([length isKindOfClass:[NSString class]] ? length : @"0"));
     YTSet(item, @"seconds", [NSNumber numberWithInteger:[[item objectForKey:@"length"] integerValue]]);
     id desc = YTGet(details, @"shortDescription");
     YTSet(item, @"description", [desc isKindOfClass:[NSString class]] ? desc : @"");
-    NSString *play = YTPlayURL(videoID);
-    if (play.length) YTSet(item, @"play", play);
+    if (live) {
+        YTSet(item, @"live", [NSNumber numberWithBool:YES]);
+        YTSet(item, @"published", @"LIVE");
+        if (hls.length) {
+            YTHLSSave(videoID, hls);
+            YTSet(item, @"hls", hls);
+        }
+        YTSet(item, @"play", YTLocalLiveURL(videoID));
+    } else {
+        NSString *play = YTPlayURL(videoID);
+        if (play.length) YTSet(item, @"play", play);
+    }
     return item;
 }
 
@@ -99,11 +150,15 @@ NSString *YTEntry(NSDictionary *item) {
     NSInteger seconds = [[item objectForKey:@"seconds"] integerValue];
     if (seconds <= 0) seconds = YTSeconds([item objectForKey:@"length"]);
     NSString *views = YTDigits([item objectForKey:@"views"] ?: @"0");
+    BOOL live = [[item objectForKey:@"live"] boolValue];
+    NSString *liveURL = live ? YTLocalLiveURL(videoID) : nil;
     BOOL high = YTWant720();
-    NSString *hi = high ? YTLocalPlayURL(videoID, YES) : YTLocalPlayURL(videoID, NO);
-    NSString *lo = (high && YTPrefBool(@"cellular720", YES)) ? hi : YTLocalPlayURL(videoID, NO);
+    NSString *hi = live ? liveURL : (high ? YTLocalPlayURL(videoID, YES) : YTLocalPlayURL(videoID, NO));
+    NSString *lo = live ? liveURL : ((high && YTPrefBool(@"cellular720", YES)) ? hi : YTLocalPlayURL(videoID, NO));
     if (!hi.length) hi = [NSString stringWithFormat:@"https://www.youtube.com/watch?v=%@", videoID];
     if (!lo.length) lo = hi;
+    NSString *playerURL = live ? liveURL : [NSString stringWithFormat:@"https://www.youtube.com/watch?v=%@", videoID];
+    if (!playerURL.length) playerURL = hi;
     NSString *customThumb = [item objectForKey:@"thumb"];
     NSString *thumb = [customThumb isKindOfClass:[NSString class]] && customThumb.length ? customThumb : [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/hqdefault.jpg", videoID];
     return [NSString stringWithFormat:
@@ -128,7 +183,7 @@ NSString *YTEntry(NSDictionary *item) {
             "<media:content url='%@' type='video/3gpp' yt:format='3' duration='%ld'/>"
             "<media:content url='%@' type='video/mp4' yt:format='8' duration='%ld'/>"
             "<media:content url='%@' type='video/mp4' yt:format='9' duration='%ld'/>"
-            "<media:player url='https://www.youtube.com/watch?v=%@'/>"
+            "<media:player url='%@'/>"
             "</media:group>"
             "</entry>",
             videoID, title, author, views, title, desc, title, videoID, (long)seconds, author, thumb,
@@ -136,7 +191,7 @@ NSString *YTEntry(NSDictionary *item) {
             YTEscape(lo), (long)seconds,
             YTEscape(hi), (long)seconds,
             YTEscape(hi), (long)seconds,
-            videoID];
+            YTEscape(playerURL)];
 }
 
 NSData *YTFeed(NSArray *items, NSInteger start, NSString *nextURL) {
@@ -319,9 +374,7 @@ NSArray *YTFillSearch(NSString *key, NSString *query, NSString *params, NSString
         NSMutableSet *seen = [NSMutableSet setWithArray:[all valueForKey:@"id"]];
         for (NSDictionary *item in page) {
             NSString *vid = [item objectForKey:@"id"];
-            NSString *views = [item objectForKey:@"views"] ?: @"";
             if (!vid.length || [seen containsObject:vid]) continue;
-            if ([views rangeOfString:@"watching" options:NSCaseInsensitiveSearch].location != NSNotFound) continue;
             [seen addObject:vid];
             [all addObject:item];
         }
@@ -510,6 +563,11 @@ void YTCollectTiles(id node, NSMutableArray *videos, NSMutableArray *playlists, 
                 }
                 [seen addObject:cid];
                 NSMutableDictionary *item = YTVideoItem(cid, title, author, subtitle, 0, @"0");
+                if (item && YTIsLiveNode(tile, 0)) {
+                    [item setObject:[NSNumber numberWithBool:YES] forKey:@"live"];
+                    [item setObject:YTMarkLive([item objectForKey:@"title"]) forKey:@"title"];
+                    [item setObject:@"0" forKey:@"length"];
+                }
                 if (item && videos) [videos addObject:item];
             } else if (playlist && playlists) {
                 [seen addObject:cid];

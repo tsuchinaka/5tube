@@ -7,6 +7,8 @@ extern NSRecursiveLock *YTListLock;
 extern NSMutableDictionary *YTCommentParams;
 extern NSMutableDictionary *YTAPICache;
 BOOL YTIsShortNode(id node, int depth);
+BOOL YTIsLiveNode(id node, int depth);
+NSString *YTMarkLive(NSString *title);
 void YTCollect(id node, NSMutableArray *out, NSMutableSet *seen);
 NSArray *YTVideosFromJSON(id json);
 NSDictionary *YTDetails(NSString *videoID);
