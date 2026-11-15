@@ -1923,6 +1923,13 @@ static void YTFinishPost(id self, int type) {
     YTFinishPostError(self, type, nil);
 }
 
+static void YTPostNote(NSString *name) {
+    if (!name.length) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:name object:nil];
+    });
+}
+
 static void YTHookPostComment(id self, SEL cmd, id text, id video) {
     NSString *vid = YTVideoToken(video);
     NSString *body = [text isKindOfClass:[NSString class]] ? text : [text description];
@@ -1954,19 +1961,28 @@ static NSDictionary *YTLikeBody(NSString *videoID) {
 static void YTHookRate(id self, SEL cmd, int liked, id video) {
     NSString *vid = YTVideoToken(video);
     BOOL ok = YTAct(liked ? @"like/like" : @"like/dislike", YTLikeBody(vid));
-    if (ok) YTFinishPost(self, 10);
+    if (ok) {
+        YTFinishPost(self, 10);
+        YTPostNote(@"YTVideoDidChangeNotification");
+    }
     YTLog([NSString stringWithFormat:@"rate %d %@", liked, vid ?: @"-"]);
 }
 
 static void YTHookAddFav(id self, SEL cmd, id video) {
     NSString *vid = YTVideoToken(video);
-    if (YTAct(@"like/like", YTLikeBody(vid))) YTFinishPost(self, 1);
+    if (YTAct(@"like/like", YTLikeBody(vid))) {
+        YTFinishPost(self, 1);
+        YTPostNote(@"YTVideoBookmarksDidChangeNotification");
+    }
     YTLog([NSString stringWithFormat:@"favorite %@", vid ?: @"-"]);
 }
 
 static void YTHookRemoveFav(id self, SEL cmd, id video) {
     NSString *vid = YTVideoToken(video);
-    if (YTAct(@"like/removelike", YTLikeBody(vid))) YTFinishPost(self, 2);
+    if (YTAct(@"like/removelike", YTLikeBody(vid))) {
+        YTFinishPost(self, 2);
+        YTPostNote(@"YTVideoBookmarksDidChangeNotification");
+    }
     YTLog([NSString stringWithFormat:@"unfavorite %@", vid ?: @"-"]);
 }
 
@@ -1976,6 +1992,7 @@ static void YTHookSubscribe(id self, SEL cmd, id user) {
     BOOL ok = channel.length && YTAct(@"subscription/subscribe", [NSDictionary dictionaryWithObject:[NSArray arrayWithObject:channel] forKey:@"channelIds"]);
     YTLog([NSString stringWithFormat:@"subscribe %@ %@", name, ok ? @"ok" : @"fail"]);
     if (!ok) return;
+    YTPostNote(@"YTVideoBookmarksDidChangeNotification");
     NSMutableDictionary *item = [NSMutableDictionary dictionary];
     NSString *href = [NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/users/%@/uploads", channel];
     [item setObject:(name ?: channel) forKey:@"Label"];
@@ -1992,7 +2009,10 @@ static void YTHookUnsubscribe(id self, SEL cmd, id sub) {
     NSString *name = [sub isKindOfClass:[NSDictionary class]] ? ([sub objectForKey:@"Label"] ?: [sub objectForKey:@"label"] ?: [sub objectForKey:@"username"]) : YTTailID(sub);
     NSString *channel = YTResolveChannel(name);
     BOOL ok = channel.length && YTAct(@"subscription/unsubscribe", [NSDictionary dictionaryWithObject:[NSArray arrayWithObject:channel] forKey:@"channelIds"]);
-    if (ok) YTFinishPost(self, 4);
+    if (ok) {
+        YTFinishPost(self, 4);
+        YTPostNote(@"YTVideoBookmarksDidChangeNotification");
+    }
     YTLog([NSString stringWithFormat:@"unsubscribe %@ %@", name, ok ? @"ok" : @"fail"]);
 }
 
@@ -2001,6 +2021,7 @@ static void YTHookCreateList(id self, SEL cmd, id name) {
     BOOL ok = YTAct(@"playlist/create", [NSDictionary dictionaryWithObjectsAndKeys:title ?: @"", @"title", @"PRIVATE", @"privacyStatus", nil]);
     YTLog([NSString stringWithFormat:@"create playlist %@ %@", title, ok ? @"ok" : @"fail"]);
     if (!ok) return;
+    YTPostNote(@"YTPlaylistsDidChangeNotification");
     NSMutableDictionary *item = [NSMutableDictionary dictionary];
     [item setObject:title forKey:@"Label"];
     [item setObject:title forKey:@"label"];
@@ -2018,6 +2039,7 @@ static void YTHookAddToList(id self, SEL cmd, id video, id playlistURL) {
     BOOL ok = vid.length && playlist.length && YTAct(@"browse/edit_playlist", [NSDictionary dictionaryWithObjectsAndKeys:playlist, @"playlistId", [NSArray arrayWithObject:action], @"actions", nil]);
     YTLog([NSString stringWithFormat:@"add %@ to %@ %@", vid, playlist, ok ? @"ok" : @"fail"]);
     if (!ok || !video) return;
+    YTPostNote(@"YTPlaylistsDidChangeNotification");
     id delegate = YTPSDelegate(self);
     SEL sel = @selector(accountFeedRequest:receivedVideos:);
     if ([delegate respondsToSelector:sel])
@@ -2103,6 +2125,71 @@ static void YTHookMyVideosReload(id self, SEL cmd) {
     YTLoadAccountFeed(self, @"http://gdata.youtube.com/feeds/api/users/default/uploads?start-index=1&max-results=25", @"my videos reload");
 }
 
+static void YTTrendingReload(id self, SEL cmd) {
+    NSString *code = [[NSLocale currentLocale] objectForKey:NSLocaleCountryCode] ?: @"US";
+    NSString *time = YTPrefString(@"trendingTime", @"today");
+    NSString *url = [NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/standardfeeds/%@/most_viewed?time=%@&start-index=1&max-results=25", code, time];
+    id request = [[NSClassFromString(@"YTSearchRequest") alloc] init];
+    objc_setAssociatedObject(request, "YTSearchDelegate", self, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([request respondsToSelector:@selector(setDelegate:)])
+        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(setDelegate:), self);
+    if ([self respondsToSelector:@selector(_startedLoading)]) [self performSelector:@selector(_startedLoading)];
+    if ([request respondsToSelector:@selector(loadRequest:)])
+        ((void (*)(id, SEL, id))objc_msgSend)(request, @selector(loadRequest:), [NSURLRequest requestWithURL:[NSURL URLWithString:url]]);
+    YTLog([NSString stringWithFormat:@"trending reload %@", time]);
+}
+
+static Class YTTrendingSourceClass(void);
+static NSString *YTTrendingName(id self, SEL cmd) { return @"Trending"; }
+static NSString *YTTrendingIcon(id self, SEL cmd) { return @"MostViewed"; }
+static Class YTTrendingDataClass(id self, SEL cmd) { return YTTrendingSourceClass(); }
+
+static Class YTTrendingSourceClass(void) {
+    static Class cls;
+    if (cls) return cls;
+    Class base = NSClassFromString(@"YTVideoDataSource");
+    if (!base) return Nil;
+    cls = objc_allocateClassPair(base, "YTTrendingVideoDataSource", 0);
+    if (!cls) return Nil;
+    class_addMethod(cls, @selector(reloadData), (IMP)YTTrendingReload, "v@:");
+    objc_registerClassPair(cls);
+    return cls;
+}
+
+static Class YTTrendingControllerClass(void) {
+    static Class cls;
+    if (cls) return cls;
+    Class base = NSClassFromString(@"YTVideoCategoryController");
+    if (!base) return Nil;
+    cls = objc_allocateClassPair(base, "YTTrendingCategoryController", 0);
+    if (!cls) return Nil;
+    class_addMethod(object_getClass((id)cls), @selector(dataSourceClass), (IMP)YTTrendingDataClass, "#@:");
+    class_addMethod(cls, @selector(name), (IMP)YTTrendingName, "@@:");
+    class_addMethod(cls, @selector(navBarTitle), (IMP)YTTrendingName, "@@:");
+    class_addMethod(cls, @selector(iconName), (IMP)YTTrendingIcon, "@@:");
+    class_addMethod(cls, @selector(moreIconName), (IMP)YTTrendingIcon, "@@:");
+    objc_registerClassPair(cls);
+    return cls;
+}
+
+static void YTTrendingClasses(void) {
+    YTTrendingSourceClass();
+    YTTrendingControllerClass();
+}
+
+static void (*YTOrigHiddenControllers)(id, SEL);
+static void YTHookHiddenControllers(id self, SEL cmd) {
+    if (YTOrigHiddenControllers) YTOrigHiddenControllers(self, cmd);
+    if (!YTPrefBool(@"trendingSection", NO)) return;
+    Ivar ivar = class_getInstanceVariable([self class], "_hiddenControllers");
+    NSMutableArray *hidden = ivar ? object_getIvar(self, ivar) : nil;
+    if (![hidden isKindOfClass:[NSMutableArray class]]) return;
+    Class cls = NSClassFromString(@"YTTrendingCategoryController");
+    if (!cls) return;
+    for (id controller in hidden) if ([controller isKindOfClass:cls]) return;
+    [hidden insertObject:[[cls alloc] init] atIndex:0];
+}
+
 static void YTHookSAX(void) {
     YTHookMethod(NSClassFromString(@"XMLSAXHTTPRequest"), @"loadRequest:", (IMP)YTHookSAXLoad, (IMP *)&YTOrigSAXLoad);
     YTHookMethod(NSClassFromString(@"YTFeedRequest"), @"loadRequest:", (IMP)YTHookFeedLoad, (IMP *)&YTOrigFeedLoad);
@@ -2125,6 +2212,7 @@ static void YTHookSAX(void) {
     YTHookMethod(NSClassFromString(@"YTAccountFeedRequest"), @"addVideo:toPlaylist:", (IMP)YTHookAddToList, NULL);
     YTHookMethod(NSClassFromString(@"YTHistoryVideoDataSource"), @"reloadData", (IMP)YTHookHistoryReload, (IMP *)&YTOrigHistoryReload);
     YTHookMethod(NSClassFromString(@"YTMyVideosVideoDataSource"), @"reloadData", (IMP)YTHookMyVideosReload, (IMP *)&YTOrigMyVideosReload);
+    YTHookMethod(NSClassFromString(@"YTContentView"), @"_updateHiddenControllers", (IMP)YTHookHiddenControllers, (IMP *)&YTOrigHiddenControllers);
 }
 
 static NSURLConnection *(*YTOrigConnect)(id, SEL, NSURLRequest *, id);
@@ -2575,6 +2663,7 @@ static void YTLoad(void) {
     YTNo720 = [NSMutableSet set];
     YTInstallCrashHandler();
     YTMigratePrefs();
+    YTTrendingClasses();
     YTAuthInstall();
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, YTPrefsChanged, CFSTR("com.sokubit.5tube/reload"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
     YTStartProxy();

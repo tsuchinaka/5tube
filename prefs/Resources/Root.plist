@@ -196,6 +196,56 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
+			<string>More</string>
+			<key>footerText</key>
+			<string>Trending adds a row in More. It uses most viewed with the window below.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>defaults</key>
+			<string>com.sokubit.5tube</string>
+			<key>key</key>
+			<string>trendingSection</string>
+			<key>label</key>
+			<string>Trending row</string>
+			<key>default</key>
+			<false/>
+			<key>PostNotification</key>
+			<string>com.sokubit.5tube/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkListCell</string>
+			<key>detail</key>
+			<string>PSListItemsController</string>
+			<key>defaults</key>
+			<string>com.sokubit.5tube</string>
+			<key>key</key>
+			<string>trendingTime</string>
+			<key>label</key>
+			<string>Trending window</string>
+			<key>default</key>
+			<string>today</string>
+			<key>validTitles</key>
+			<array>
+				<string>Today</string>
+				<string>This Week</string>
+				<string>All Time</string>
+			</array>
+			<key>validValues</key>
+			<array>
+				<string>today</string>
+				<string>this_week</string>
+				<string>all_time</string>
+			</array>
+			<key>PostNotification</key>
+			<string>com.sokubit.5tube/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
 			<string>Extras</string>
 			<key>footerText</key>
 			<string>Featured shows your recommendations when signed in, or most viewed this week when signed out. History and My Videos use the account.</string>

@@ -25,8 +25,8 @@ Reglas:
 
 ## 2. Añadir una sección
 
-Estado: no hecho. La app registra las secciones en `YTContentView`
-(`_categoryControllers`) y las pinta en `_buttonBarItems`.
+Estado: hecho, opt-in (`trendingSection`). La app registra las secciones en
+`YTContentView` (`_categoryControllers`) y las pinta en `_buttonBarItems`.
 
 La vía barata: reutilizar un controlador existente y cambiar su feed, como
 Featured y Most viewed. La vía completa (las clases del framework se declaran
@@ -44,7 +44,9 @@ tweak):
 @end
 ```
 
-El data source solo tiene que pedir su feed:
+En 5Tube las clases se crean con `objc_allocateClassPair`, no con `@interface`,
+porque el tweak no linkea contra YouTube.framework. El data source solo tiene
+que pedir su feed:
 
 ```objc
 @interface YTTrendingSource : YTVideoDataSource
@@ -210,10 +212,10 @@ Si tocan UI, saltar a la cola principal.
 | Capacidad | Estado |
 | --- | --- |
 | Feeds GData | hecho |
-| Sección nueva | pendiente |
-| Filtros y paginación | parcial |
+| Sección nueva | hecho, opt-in |
+| Filtros y paginación | hecho |
 | Iconos y textos | parcial |
 | Botones | hecho |
 | Player y formato | hecho |
-| Modelo YTVideo | lectura |
-| Notificaciones | parcial |
+| Modelo YTVideo | lectura y acciones |
+| Notificaciones | hecho |

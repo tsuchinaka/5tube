@@ -228,7 +228,7 @@ existente y cambiar solo el feed.
 
 ## Estado del tweak
 
-- `com.sokubit.5tube` 0.1.29.
+- `com.sokubit.5tube` 0.1.30.
 - Login migrado desde `com.bytebox.youtubeinnertube`.
 - Featured: `FEwhat_to_watch` con sesión; most viewed de la semana sin sesión.
 - Most viewed: `today`, `this_week`, `all_time`.
@@ -236,3 +236,6 @@ existente y cambiar solo el feed.
 - Playlists: conteo real del overlay.
 - History y My Videos: data source nativo, sin petición manual que dejaba el
   delegado colgando.
+- Trending: fila en More, clases creadas en runtime, opt-in con `trendingSection`.
+- Acciones: postean `YTVideoDidChangeNotification`,
+  `YTVideoBookmarksDidChangeNotification` y `YTPlaylistsDidChangeNotification`.
