@@ -135,6 +135,7 @@ NSDictionary *YTDetails(NSString *videoID) {
             YTSet(item, @"hls", hls);
         }
         YTSet(item, @"play", YTLocalLiveURL(videoID));
+        YTLog([NSString stringWithFormat:@"details live %@ hls %@", videoID, hls.length ? @"yes" : @"no"]);
     } else {
         NSString *play = YTPlayURL(videoID);
         if (play.length) YTSet(item, @"play", play);
@@ -152,6 +153,8 @@ NSString *YTEntry(NSDictionary *item) {
     NSString *views = YTDigits([item objectForKey:@"views"] ?: @"0");
     BOOL live = [[item objectForKey:@"live"] boolValue];
     NSString *liveURL = live ? YTLocalLiveURL(videoID) : nil;
+    if (live) YTLog([NSString stringWithFormat:@"entry live %@", videoID]);
+    NSInteger contentSeconds = live ? 3600 : seconds;
     BOOL high = YTWant720();
     NSString *hi = live ? liveURL : (high ? YTLocalPlayURL(videoID, YES) : YTLocalPlayURL(videoID, NO));
     NSString *lo = live ? liveURL : ((high && YTPrefBool(@"cellular720", YES)) ? hi : YTLocalPlayURL(videoID, NO));
@@ -187,10 +190,10 @@ NSString *YTEntry(NSDictionary *item) {
             "</media:group>"
             "</entry>",
             videoID, title, author, views, title, desc, title, videoID, (long)seconds, author, thumb,
-            YTEscape(lo), (long)seconds,
-            YTEscape(lo), (long)seconds,
-            YTEscape(hi), (long)seconds,
-            YTEscape(hi), (long)seconds,
+            YTEscape(lo), (long)contentSeconds,
+            YTEscape(lo), (long)contentSeconds,
+            YTEscape(hi), (long)contentSeconds,
+            YTEscape(hi), (long)contentSeconds,
             YTEscape(playerURL)];
 }
 

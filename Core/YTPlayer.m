@@ -342,6 +342,7 @@ void YTServe(int client) {
         NSData *master = hls.length ? YTGET(hls) : nil;
         NSData *body = master.length ? YTLiveMaster(master) : nil;
         if (!body.length) {
+            YTLog([NSString stringWithFormat:@"live miss %@", vid]);
             NSString *miss = @"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
             YTWriteAll(client, [miss UTF8String], [miss length]);
             return;
@@ -412,6 +413,18 @@ void YTServe(int client) {
     }
     BOOL low = [[parts objectAtIndex:1] rangeOfString:@".360.mp4"].location != NSNotFound;
     NSString *upstream = YTFetchUpstream(videoID);
+    if (!upstream.length && !low) {
+        NSString *hls = YTHLSFor(videoID);
+        NSData *master = hls.length ? YTGET(hls) : nil;
+        NSData *liveBody = master.length ? YTLiveMaster(master) : nil;
+        if (liveBody.length) {
+            NSString *head = [NSString stringWithFormat:@"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: %u\r\nConnection: close\r\n\r\n", (unsigned)[liveBody length]];
+            YTWriteAll(client, [head UTF8String], [head length]);
+            if (![method isEqualToString:@"HEAD"]) YTWriteAll(client, [liveBody bytes], [liveBody length]);
+            YTLog([NSString stringWithFormat:@"mp4 live %@ %u", videoID, (unsigned)[liveBody length]]);
+            return;
+        }
+    }
     if (low || !YTWant720()) {
         YTLog([NSString stringWithFormat:@"serve 360 %@ %@", videoID, range ?: @"-"]);
         if (!upstream.length) {
