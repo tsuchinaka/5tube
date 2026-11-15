@@ -175,7 +175,6 @@ NSString *YTEntry(NSDictionary *item) {
             "<yt:accessControl action='comment' permission='allowed'/>"
             "<yt:accessControl action='rate' permission='allowed'/>"
             "<gd:comments yt:x='1'><gd:feedLink rel='http://gdata.youtube.com/schemas/2007#comments' href='http://gdata.youtube.com/feeds/api/videos/%@/comments' countHint='10'/></gd:comments>"
-            "<app:control yt:x='1'><yt:state name='published' reasonCode='allowed'/></app:control>"
             "<yt:statistics viewCount='%@'/>"
             "<media:group yt:x='1'>"
             "<media:title type='plain'>%@</media:title>"
