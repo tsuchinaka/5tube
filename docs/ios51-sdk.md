@@ -137,7 +137,7 @@ sirve por el proxy local (`127.0.0.1`) para no depender del TLS del cliente.
 - H.264 Main/High hasta 720p30; AAC-LC.
 - `UIMoviePlayerController` es la clase privada que usa YouTube; el tweak la
   engancha para duración y `setMoviePath:`.
-- El player espía `Range`; el proxy debe devolver 206.
+- El player pide `Range`; el proxy debe devolver 206.
 
 ## Runtime Objective-C y Substrate
 

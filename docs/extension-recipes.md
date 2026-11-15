@@ -5,7 +5,7 @@ Cómo llevar cada capacidad del framework a código. El estado indica qué ya ha
 
 ## 1. Reemplazar un feed GData
 
-Estado: hecho. Punto de entrada: `YTAtomForRequest` en `Tweak.m`.
+Estado: hecho. Punto de entrada: `YTAtomForRequest` en `Core/YTHooks.m`.
 
 El parser original sigue, solo cambia el cuerpo. Añadir una ruta es una rama:
 

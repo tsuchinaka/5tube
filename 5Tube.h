@@ -1,0 +1,25 @@
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
+#import <stdlib.h>
+#import <errno.h>
+#import <signal.h>
+#import <unistd.h>
+#import <sys/socket.h>
+#import <netinet/in.h>
+#import <arpa/inet.h>
+#import <fcntl.h>
+#import <stdio.h>
+#import <dlfcn.h>
+#import "YTAuth.h"
+#import "YTMux.h"
+
+#import "Core/YTCommon.h"
+#import "Core/YTAPI.h"
+#import "Core/YTFeed.h"
+#import "Core/YTPlayer.h"
+#import "Core/YTCaptions.h"
+#import "Core/YTActions.h"
+#import "Core/YTTrending.h"
+#import "Core/YTHooks.h"
