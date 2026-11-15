@@ -396,7 +396,8 @@ void YTHookPlayer(void) {
 }
 
 id YTHookReq(id self, SEL cmd, NSURL *url, NSUInteger policy, NSTimeInterval timeout) {
-    YTLog([NSString stringWithFormat:@"request %@", [url absoluteString]]);
+    NSString *text = [url isKindOfClass:[NSURL class]] ? [url absoluteString] : [url description];
+    YTLog([NSString stringWithFormat:@"request %@", text]);
     return YTOrigReq(self, cmd, url, policy, timeout);
 }
 

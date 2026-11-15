@@ -12,7 +12,7 @@ static id YTHookCommentsURL(id self, SEL cmd) {
     NSString *vid = YTVideoToken(self);
     if (vid.length) {
         YTLog([NSString stringWithFormat:@"comments getter %@", vid]);
-        return [NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/videos/%@/comments", vid];
+        return [NSURL URLWithString:[NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/videos/%@/comments", vid]];
     }
     return YTOrigCommentsURL ? YTOrigCommentsURL(self, cmd) : nil;
 }
