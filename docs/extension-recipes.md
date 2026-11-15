@@ -207,6 +207,29 @@ CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter()
 Las notificaciones del framework se postean en el hilo que hace la petición.
 Si tocan UI, saltar a la cola principal.
 
+## 9. Captions
+
+Estado: implementado, opt-in con `captionOverlay`.
+
+La app no pide subtítulos en ningún flujo: su binario no contiene la cadena
+`caption`. El framework sí tiene `YTCaptionsRequest` y `YTCaptionTrack`, pero
+nadie los usa. El endpoint viejo de lista está muerto:
+
+- `api/timedtext?type=list&v=<id>` devuelve 200 con 0 bytes.
+- Las pistas reales están en `player.captions.playerCaptionsTracklistRenderer.captionTracks`.
+- Cada pista trae un `baseUrl` firmado que devuelve `<timedtext format="3">`.
+
+El tweak:
+
+1. `YTCaptionTracks` pide el `player` y cachea `lang`, `kind`, `name` y `url`.
+2. `YTCaptionFeed` responde a la ruta `captions` con un feed de pistas.
+3. El proxy `/<id>.<lang>[.asr].srt` descarga el `baseUrl` y convierte el XML a SRT.
+4. `YTCaptionPrepare` baja el track al reproducir y `YTCaptionTick` pinta el cue
+   activo en un label sobre el player, con un botón CC.
+
+Riesgo: el feed de captions puede tumbar el parser de la app si el formato no
+coincide. Por eso `captionOverlay` va apagado por defecto.
+
 ## Resumen
 
 | Capacidad | Estado |
@@ -219,3 +242,4 @@ Si tocan UI, saltar a la cola principal.
 | Player y formato | hecho |
 | Modelo YTVideo | lectura y acciones |
 | Notificaciones | hecho |
+| Captions | opt-in |

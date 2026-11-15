@@ -228,7 +228,7 @@ existente y cambiar solo el feed.
 
 ## Estado del tweak
 
-- `com.sokubit.5tube` 0.1.30.
+- `com.sokubit.5tube` 0.1.32.
 - Login migrado desde `com.bytebox.youtubeinnertube`.
 - Featured: `FEwhat_to_watch` con sesión; most viewed de la semana sin sesión.
 - Most viewed: `today`, `this_week`, `all_time`.
@@ -237,5 +237,9 @@ existente y cambiar solo el feed.
 - History y My Videos: data source nativo, sin petición manual que dejaba el
   delegado colgando.
 - Trending: fila en More, clases creadas en runtime, opt-in con `trendingSection`.
+- Captions: la app no tiene UI ni una sola cadena de subtítulos. El tweak pide
+  las pistas al `player` de InnerTube (el endpoint `api/timedtext?type=list`
+  devuelve 200 con cuerpo vacío), las sirve como `.srt` y dibuja un overlay con
+  botón CC. Opt-in con `captionOverlay` mientras se valida el feed.
 - Acciones: postean `YTVideoDidChangeNotification`,
   `YTVideoBookmarksDidChangeNotification` y `YTPlaylistsDidChangeNotification`.

@@ -256,6 +256,20 @@
 			<key>defaults</key>
 			<string>com.sokubit.5tube</string>
 			<key>key</key>
+			<string>captionOverlay</string>
+			<key>label</key>
+			<string>Captions overlay</string>
+			<key>default</key>
+			<false/>
+			<key>PostNotification</key>
+			<string>com.sokubit.5tube/reload</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>defaults</key>
+			<string>com.sokubit.5tube</string>
+			<key>key</key>
 			<string>comments</string>
 			<key>label</key>
 			<string>Comments</string>
