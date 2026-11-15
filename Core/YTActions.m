@@ -82,6 +82,18 @@ void YTFixVideosInSource(id source) {
     for (id video in videos) YTFixVideoObject(video);
 }
 
+static void (*YTOrigCommentsViewSetVideo)(id, SEL, id);
+static void YTHookCommentsViewSetVideo(id self, SEL cmd, id video) {
+    YTFixVideoObject(video);
+    if (YTOrigCommentsViewSetVideo) YTOrigCommentsViewSetVideo(self, cmd, video);
+}
+
+static void (*YTOrigDetailsViewSetVideo)(id, SEL, id);
+static void YTHookDetailsViewSetVideo(id self, SEL cmd, id video) {
+    YTFixVideoObject(video);
+    if (YTOrigDetailsViewSetVideo) YTOrigDetailsViewSetVideo(self, cmd, video);
+}
+
 void YTVideoPermissionsInstall(void) {
     Class video = NSClassFromString(@"YTVideo");
     YTHookMethod(video, @"allowComments", (IMP)YTHookAllowComments, NULL);
@@ -89,6 +101,8 @@ void YTVideoPermissionsInstall(void) {
     YTHookMethod(video, @"initAllowingComments:allowingRating:ownVideo:", (IMP)YTHookVideoInit, (IMP *)&YTOrigVideoInit);
     YTHookMethod(video, @"commentsURL", (IMP)YTHookCommentsURL, (IMP *)&YTOrigCommentsURL);
     YTHookMethod(NSClassFromString(@"YTCommentsRequest"), @"initRequestingCommentsForVideo:withDelegate:", (IMP)YTHookCommentsRequestInit, (IMP *)&YTOrigCommentsRequestInit);
+    YTHookMethod(NSClassFromString(@"YTCommentsView"), @"setVideo:", (IMP)YTHookCommentsViewSetVideo, (IMP *)&YTOrigCommentsViewSetVideo);
+    YTHookMethod(NSClassFromString(@"YTVideoDetailsView"), @"setVideo:", (IMP)YTHookDetailsViewSetVideo, (IMP *)&YTOrigDetailsViewSetVideo);
 }
 
 void (*YTOrigAddHistory)(id, SEL, id);
