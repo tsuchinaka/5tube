@@ -7,11 +7,29 @@ static id YTHookVideoInit(id self, SEL cmd, BOOL comments, BOOL rating, BOOL own
     return YTOrigVideoInit ? YTOrigVideoInit(self, cmd, YES, YES, own) : self;
 }
 
+static id (*YTOrigCommentsRequestInit)(id, SEL, id, id);
+static id YTHookCommentsRequestInit(id self, SEL cmd, id video, id delegate) {
+    if (video) {
+        NSString *vid = YTVideoToken(video);
+        Ivar ivar = class_getInstanceVariable([video class], "_commentsURL");
+        if (vid.length && ivar && !object_getIvar(video, ivar)) {
+            NSString *text = [NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/videos/%@/comments", vid];
+            const char *type = ivar_getTypeEncoding(ivar);
+            id value = (type && strstr(type, "NSURL")) ? [NSURL URLWithString:text] : text;
+            objc_setAssociatedObject(video, ivar, value, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            object_setIvar(video, ivar, value);
+            YTLog([NSString stringWithFormat:@"comments url %@", vid]);
+        }
+    }
+    return YTOrigCommentsRequestInit ? YTOrigCommentsRequestInit(self, cmd, video, delegate) : nil;
+}
+
 void YTVideoPermissionsInstall(void) {
     Class video = NSClassFromString(@"YTVideo");
     YTHookMethod(video, @"allowComments", (IMP)YTHookAllowComments, NULL);
     YTHookMethod(video, @"allowRating", (IMP)YTHookAllowRating, NULL);
     YTHookMethod(video, @"initAllowingComments:allowingRating:ownVideo:", (IMP)YTHookVideoInit, (IMP *)&YTOrigVideoInit);
+    YTHookMethod(NSClassFromString(@"YTCommentsRequest"), @"initRequestingCommentsForVideo:withDelegate:", (IMP)YTHookCommentsRequestInit, (IMP *)&YTOrigCommentsRequestInit);
 }
 
 void (*YTOrigAddHistory)(id, SEL, id);
