@@ -7,6 +7,16 @@ static id YTHookVideoInit(id self, SEL cmd, BOOL comments, BOOL rating, BOOL own
     return YTOrigVideoInit ? YTOrigVideoInit(self, cmd, YES, YES, own) : self;
 }
 
+static id (*YTOrigCommentsURL)(id, SEL);
+static id YTHookCommentsURL(id self, SEL cmd) {
+    NSString *vid = YTVideoToken(self);
+    if (vid.length) {
+        YTLog([NSString stringWithFormat:@"comments getter %@", vid]);
+        return [NSURL URLWithString:[NSString stringWithFormat:@"http://gdata.youtube.com/feeds/api/videos/%@/comments", vid]];
+    }
+    return YTOrigCommentsURL ? YTOrigCommentsURL(self, cmd) : nil;
+}
+
 static id (*YTOrigCommentsRequestInit)(id, SEL, id, id);
 static id YTHookCommentsRequestInit(id self, SEL cmd, id video, id delegate) {
     if (video) {
@@ -29,6 +39,7 @@ void YTVideoPermissionsInstall(void) {
     YTHookMethod(video, @"allowComments", (IMP)YTHookAllowComments, NULL);
     YTHookMethod(video, @"allowRating", (IMP)YTHookAllowRating, NULL);
     YTHookMethod(video, @"initAllowingComments:allowingRating:ownVideo:", (IMP)YTHookVideoInit, (IMP *)&YTOrigVideoInit);
+    YTHookMethod(video, @"commentsURL", (IMP)YTHookCommentsURL, (IMP *)&YTOrigCommentsURL);
     YTHookMethod(NSClassFromString(@"YTCommentsRequest"), @"initRequestingCommentsForVideo:withDelegate:", (IMP)YTHookCommentsRequestInit, (IMP *)&YTOrigCommentsRequestInit);
 }
 
