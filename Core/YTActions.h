@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+void YTVideoPermissionsInstall(void);
 extern void (*YTOrigAddHistory)(id, SEL, id);
 void YTHookAddHistory(id self, SEL cmd, id video);
 void YTHookAddHistoryNow(id self, SEL cmd, id video);

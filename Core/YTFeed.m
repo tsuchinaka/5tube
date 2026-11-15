@@ -283,15 +283,60 @@ NSString *YTFindBrowseID(id node, int depth) {
     return nil;
 }
 
+static void YTCollectContinuations(id node, NSMutableArray *out, int depth) {
+    if (!node || depth > 12) return;
+    if ([node isKindOfClass:[NSArray class]]) {
+        for (id child in node) YTCollectContinuations(child, out, depth + 1);
+        return;
+    }
+    if (![node isKindOfClass:[NSDictionary class]]) return;
+    id command = YTGet(node, @"continuationCommand");
+    id token = YTGet(command, @"token");
+    if ([token isKindOfClass:[NSString class]] && [token length] && ![out containsObject:token]) [out addObject:token];
+    for (id child in [node allValues]) YTCollectContinuations(child, out, depth + 1);
+}
+
+static BOOL YTHasKey(id node, NSString *key, int depth) {
+    if (!node || depth > 12) return NO;
+    if ([node isKindOfClass:[NSDictionary class]]) {
+        if (YTGet(node, key)) return YES;
+        for (id child in [node allValues]) if (YTHasKey(child, key, depth + 1)) return YES;
+        return NO;
+    }
+    if ([node isKindOfClass:[NSArray class]]) {
+        for (id child in node) if (YTHasKey(child, key, depth + 1)) return YES;
+    }
+    return NO;
+}
+
 void YTCollectComments(id node, NSMutableArray *out, int depth) {
-    if (!node || depth > 14) return;
+    if (!node || depth > 16) return;
     if ([node isKindOfClass:[NSArray class]]) {
         for (id child in node) YTCollectComments(child, out, depth + 1);
         return;
     }
     if (![node isKindOfClass:[NSDictionary class]]) return;
+    id payload = YTGet(node, @"commentEntityPayload");
+    if ([payload isKindOfClass:[NSDictionary class]]) {
+        id props = YTGet(payload, @"properties");
+        id content = YTGet(props, @"content");
+        NSString *text = [content isKindOfClass:[NSString class]] ? content : YTText(YTGet(content, @"content"));
+        if (!text.length) text = YTText(content);
+        NSString *author = YTText(YTGet(YTGet(payload, @"author"), @"displayName"));
+        NSString *date = YTText(YTGet(props, @"publishedTime"));
+        id cid = YTGet(props, @"commentId");
+        if (text.length) {
+            NSMutableDictionary *item = [NSMutableDictionary dictionary];
+            YTSet(item, @"text", text);
+            YTSet(item, @"author", author);
+            YTSet(item, @"date", date);
+            if (cid) YTSet(item, @"id", cid);
+            [out addObject:item];
+        }
+        return;
+    }
     id text = YTGet(node, @"contentText");
-        if (text && YTGet(node, @"authorText")) {
+    if (text && YTGet(node, @"authorText")) {
         NSMutableDictionary *item = [NSMutableDictionary dictionary];
         YTSet(item, @"text", YTText(text));
         YTSet(item, @"author", YTText(YTGet(node, @"authorText")));
@@ -462,17 +507,41 @@ void YTSaveCommentParams(NSString *videoID, id json) {
 
 NSData *YTCommentFeed(NSString *videoID) {
     NSMutableString *xml = [NSMutableString string];
-    [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:yt='http://gdata.youtube.com/schemas/2007' yt:x='1'>"];
+    [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/' xmlns:yt='http://gdata.youtube.com/schemas/2007' yt:x='1'>"];
     if (YTPrefBool(@"comments", YES) && videoID.length) {
-        id json = YTPost(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
-        YTSaveCommentParams(videoID, json);
+        id first = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
+        YTSaveCommentParams(videoID, first);
+        NSMutableArray *tokens = [NSMutableArray array];
+        YTCollectContinuations(first, tokens, 0);
         NSMutableArray *comments = [NSMutableArray array];
-        YTCollectComments(json, comments, 0);
-        for (NSDictionary *item in comments) {
-            [xml appendFormat:@"<entry yt:x='1'><title yt:x='1'>%@</title><author yt:x='1'><name yt:x='1'>%@</name></author><content type='text'>%@</content></entry>",
-             YTEscape([item objectForKey:@"author"] ?: @""), YTEscape([item objectForKey:@"author"] ?: @""), YTEscape([item objectForKey:@"text"] ?: @"")];
+        for (NSString *token in tokens) {
+            id page = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
+            if (!YTHasKey(page, @"commentThreadRenderer", 0) && !YTHasKey(page, @"commentEntityPayload", 0)) continue;
+            YTCollectComments(page, comments, 0);
+            if (comments.count) break;
         }
-        YTLog([NSString stringWithFormat:@"comments %@ %u", videoID, (unsigned)[comments count]]);
+        NSMutableSet *seen = [NSMutableSet set];
+        NSMutableArray *unique = [NSMutableArray array];
+        for (NSDictionary *item in comments) {
+            id cid = [item objectForKey:@"id"];
+            if (cid && [seen containsObject:cid]) continue;
+            if (cid) [seen addObject:cid];
+            [unique addObject:item];
+        }
+        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+        [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
+        NSString *now = [formatter stringFromDate:[NSDate date]];
+        [xml appendFormat:@"<openSearch:totalResults>%u</openSearch:totalResults><openSearch:startIndex>1</openSearch:startIndex><openSearch:itemsPerPage>%u</openSearch:itemsPerPage>",
+         (unsigned)[unique count], (unsigned)[unique count]];
+        for (NSDictionary *item in unique) {
+            NSString *cid = [item objectForKey:@"id"] ?: now;
+            NSString *date = [item objectForKey:@"date"];
+            if (!date.length) date = now;
+            [xml appendFormat:@"<entry yt:x='1'><id>tag:youtube.com,2008:video:%@:comment:%@</id><published>%@</published><updated>%@</updated><author yt:x='1'><name yt:x='1'>%@</name></author><content type='text'>%@</content></entry>",
+             YTEscape(videoID), YTEscape([cid description]), YTEscape(date), YTEscape(date),
+             YTEscape([item objectForKey:@"author"] ?: @""), YTEscape([item objectForKey:@"text"] ?: @"")];
+        }
+        YTLog([NSString stringWithFormat:@"comments %@ %u", videoID, (unsigned)[unique count]]);
     }
     [xml appendString:@"</feed>"];
     return [xml dataUsingEncoding:NSUTF8StringEncoding];

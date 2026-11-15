@@ -304,6 +304,7 @@ void YTHookSAX(void) {
     YTHookMethod(NSClassFromString(@"YTMyVideosVideoDataSource"), @"reloadData", (IMP)YTHookMyVideosReload, (IMP *)&YTOrigMyVideosReload);
     YTHookMethod(NSClassFromString(@"YTContentView"), @"addVideoToHistory:", (IMP)YTHookAddHistory, (IMP *)&YTOrigAddHistory);
     YTHookMethod(NSClassFromString(@"YTContentView"), @"_addVideoToHistoryNow:", (IMP)YTHookAddHistoryNow, (IMP *)&YTOrigAddHistoryNow);
+    YTVideoPermissionsInstall();
     YTHookMethod(NSClassFromString(@"YTContentView"), @"_updateHiddenControllers", (IMP)YTHookHiddenControllers, (IMP *)&YTOrigHiddenControllers);
 }
 

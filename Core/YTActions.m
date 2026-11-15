@@ -1,5 +1,19 @@
 #import "5Tube.h"
 
+static BOOL YTHookAllowComments(id self, SEL cmd) { return YES; }
+static BOOL YTHookAllowRating(id self, SEL cmd) { return YES; }
+static id (*YTOrigVideoInit)(id, SEL, BOOL, BOOL, BOOL);
+static id YTHookVideoInit(id self, SEL cmd, BOOL comments, BOOL rating, BOOL own) {
+    return YTOrigVideoInit ? YTOrigVideoInit(self, cmd, YES, YES, own) : self;
+}
+
+void YTVideoPermissionsInstall(void) {
+    Class video = NSClassFromString(@"YTVideo");
+    YTHookMethod(video, @"allowComments", (IMP)YTHookAllowComments, NULL);
+    YTHookMethod(video, @"allowRating", (IMP)YTHookAllowRating, NULL);
+    YTHookMethod(video, @"initAllowingComments:allowingRating:ownVideo:", (IMP)YTHookVideoInit, (IMP *)&YTOrigVideoInit);
+}
+
 void (*YTOrigAddHistory)(id, SEL, id);
 void (*YTOrigAddHistoryNow)(id, SEL, id);
 void (*YTOrigHistoryReload)(id, SEL);

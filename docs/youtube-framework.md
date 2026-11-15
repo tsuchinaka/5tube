@@ -245,3 +245,7 @@ existente y cambiar solo el feed.
   botón CC. Opt-in con `captionOverlay` mientras se valida el feed.
 - Acciones: postean `YTVideoDidChangeNotification`,
   `YTVideoBookmarksDidChangeNotification` y `YTPlaylistsDidChangeNotification`.
+- Comentarios: el `next` del cliente ANDROID ya no trae `commentRenderer`; el
+  tweak usa el `next` WEB, sigue la continuación de comentarios y lee
+  `commentEntityPayload`. `YTVideo.allowComments` y `allowRating` se fuerzan a
+  YES para que la app no muestre "Ratings or comments are not allowed".
