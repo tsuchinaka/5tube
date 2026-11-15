@@ -74,37 +74,60 @@ NSString *YTLocalLiveURL(NSString *videoID) {
 NSData *YTLiveMaster(NSData *master) {
     NSString *text = master.length ? [[NSString alloc] initWithData:master encoding:NSUTF8StringEncoding] : nil;
     if (!text.length) return master;
-    NSMutableString *out = [NSMutableString string];
-    BOOL skipNext = NO;
-    BOOL kept = NO;
-    for (NSString *line in [text componentsSeparatedByString:@"\n"]) {
+    NSArray *lines = [text componentsSeparatedByString:@"\n"];
+    NSMutableArray *prefix = [NSMutableArray array];
+    NSMutableArray *variants = [NSMutableArray array];
+    NSString *meta = nil;
+    BOOL beforeVariants = YES;
+    for (NSString *line in lines) {
         if ([line hasPrefix:@"#EXT-X-STREAM-INF:"]) {
+            meta = line;
+            beforeVariants = NO;
+            continue;
+        }
+        if (meta && line.length && ![line hasPrefix:@"#"]) {
             int height = 0;
             int fps = 0;
-            NSRange res = [line rangeOfString:@"RESOLUTION="];
+            int bandwidth = 0;
+            NSRange res = [meta rangeOfString:@"RESOLUTION="];
             if (res.location != NSNotFound) {
-                NSString *rest = [line substringFromIndex:res.location + res.length];
+                NSString *rest = [meta substringFromIndex:res.location + res.length];
                 NSRange x = [rest rangeOfString:@"x"];
                 if (x.location != NSNotFound) height = [[rest substringFromIndex:x.location + 1] intValue];
             }
-            NSRange fr = [line rangeOfString:@"FRAME-RATE="];
-            if (fr.location != NSNotFound) fps = (int)[[line substringFromIndex:fr.location + fr.length] doubleValue];
-            skipNext = height > 720 || fps > 30;
-            if (!skipNext) {
-                [out appendString:line];
-                [out appendString:@"\n"];
-                kept = YES;
-            }
+            NSRange fr = [meta rangeOfString:@"FRAME-RATE="];
+            if (fr.location != NSNotFound) fps = (int)[[meta substringFromIndex:fr.location + fr.length] doubleValue];
+            NSRange bw = [meta rangeOfString:@"BANDWIDTH="];
+            if (bw.location != NSNotFound) bandwidth = [[meta substringFromIndex:bw.location + bw.length] intValue];
+            [variants addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+                                 meta, @"meta", line, @"url",
+                                 [NSNumber numberWithInt:height], @"height",
+                                 [NSNumber numberWithInt:fps], @"fps",
+                                 [NSNumber numberWithInt:bandwidth], @"bandwidth", nil]];
+            meta = nil;
             continue;
         }
-        if (skipNext && line.length && ![line hasPrefix:@"#"]) {
-            skipNext = NO;
-            continue;
-        }
-        [out appendString:line];
-        [out appendString:@"\n"];
+        if (beforeVariants) [prefix addObject:line];
     }
-    if (!kept) return master;
+    if (!variants.count) return master;
+    NSDictionary *best = nil;
+    int bestHeight = 0;
+    int bestBandwidth = 0;
+    for (NSDictionary *variant in variants) {
+        int height = [[variant objectForKey:@"height"] intValue];
+        int fps = [[variant objectForKey:@"fps"] intValue];
+        int bandwidth = [[variant objectForKey:@"bandwidth"] intValue];
+        if (height > 720 || height < 144 || fps > 30) continue;
+        if (height > bestHeight || (height == bestHeight && bandwidth > bestBandwidth)) {
+            best = variant;
+            bestHeight = height;
+            bestBandwidth = bandwidth;
+        }
+    }
+    if (!best) return master;
+    NSMutableString *out = [NSMutableString string];
+    for (NSString *line in prefix) [out appendFormat:@"%@\n", line];
+    [out appendFormat:@"%@\n%@\n", [best objectForKey:@"meta"], [best objectForKey:@"url"]];
     return [out dataUsingEncoding:NSUTF8StringEncoding];
 }
 

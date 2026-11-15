@@ -228,7 +228,8 @@ Si falla: parar y replantear con proxy de manifiesto o segmentos. No seguir.
 - `YTDetails` lee `isLive`, `hlsManifestUrl` y descarta `licenseInfos`.
 - `YTEntry` usa `/live/<id>.m3u8` para live y deja el proxy MP4 para VOD.
 - `YTHLSFor` cachea el manifiesto y lo renueva si le quedan menos de 10 min.
-- `YTLiveMaster` elimina variantes de más de 720p o más de 30 fps.
+- `YTLiveMaster` deja solo la mejor variante compatible: 720p30 si existe,
+  480p30 si el canal solo emite 720p60 o 1080p. Sin ABR a 144p/240p/360p.
 - `YTFixTime` convierte `nan`/`inf` en 0 para no romper la duración.
 - Validado: el proxy devuelve 200; `hlstest` reproduce el manifiesto del proxy
   y el tiempo avanza; los masters de NBC y FOX salen sin 1080p ni 60 fps.
