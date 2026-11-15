@@ -172,6 +172,10 @@ NSString *YTEntry(NSDictionary *item) {
             "<title type='text'>%@</title>"
             "<author yt:x='1'><name yt:x='1'>%@</name></author>"
             "<yt:accessControl action='list' permission='allowed'/>"
+            "<yt:accessControl action='comment' permission='allowed'/>"
+            "<yt:accessControl action='rate' permission='allowed'/>"
+            "<gd:comments yt:x='1'><gd:feedLink rel='http://gdata.youtube.com/schemas/2007#comments' href='http://gdata.youtube.com/feeds/api/videos/%@/comments' countHint='10'/></gd:comments>"
+            "<app:control yt:x='1'><yt:state name='published' reasonCode='allowed'/></app:control>"
             "<yt:statistics viewCount='%@'/>"
             "<media:group yt:x='1'>"
             "<media:title type='plain'>%@</media:title>"
@@ -189,7 +193,7 @@ NSString *YTEntry(NSDictionary *item) {
             "<media:player url='%@'/>"
             "</media:group>"
             "</entry>",
-            videoID, title, author, views, title, desc, title, videoID, (long)seconds, author, thumb,
+            videoID, title, author, videoID, views, title, desc, title, videoID, (long)seconds, author, thumb,
             YTEscape(lo), (long)contentSeconds,
             YTEscape(lo), (long)contentSeconds,
             YTEscape(hi), (long)contentSeconds,
@@ -205,6 +209,7 @@ NSData *YTFeed(NSArray *items, NSInteger start, NSString *nextURL) {
                        "xmlns:media='http://search.yahoo.com/mrss/' "
                        "xmlns:yt='http://gdata.youtube.com/schemas/2007' "
                        "xmlns:gd='http://schemas.google.com/g/2005' "
+                       "xmlns:app='http://www.w3.org/2007/app' "
                        "yt:x='1'>"];
     NSInteger total = start + (NSInteger)[items count] - 1;
     if (total < (NSInteger)[items count]) total = (NSInteger)[items count];
@@ -950,6 +955,7 @@ NSData *YTRawFeed(NSString *body, NSInteger start, NSUInteger count, NSString *n
                        "xmlns:media='http://search.yahoo.com/mrss/' "
                        "xmlns:yt='http://gdata.youtube.com/schemas/2007' "
                        "xmlns:gd='http://schemas.google.com/g/2005' "
+                       "xmlns:app='http://www.w3.org/2007/app' "
                        "yt:x='1'>"];
     [xml appendFormat:@"<openSearch:startIndex yt:x='1'>%ld</openSearch:startIndex>", (long)(start < 1 ? 1 : start)];
     [xml appendFormat:@"<openSearch:totalResults yt:x='1'>%u</openSearch:totalResults>", (unsigned)(count + (nextURL.length ? 500 : 0))];
