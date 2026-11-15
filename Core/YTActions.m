@@ -35,6 +35,15 @@ static id YTHookCommentsRequestInit(id self, SEL cmd, id video, id delegate) {
     return YTOrigCommentsRequestInit ? YTOrigCommentsRequestInit(self, cmd, video, delegate) : nil;
 }
 
+// YTCommentsRequest overrides loadRequest: and hands the URL to
+// YTAuthenticator. Device auth never completes, so the request stays
+// deferred and the comments view spins forever. Deliver it ourselves.
+static void YTHookCommentsLoad(id self, SEL cmd, id request) {
+    NSURL *url = [request respondsToSelector:@selector(URL)] ? [request URL] : nil;
+    YTLog([NSString stringWithFormat:@"comments load %@", [url absoluteString]]);
+    YTStartLoad(self, request);
+}
+
 static Ivar YTFindIvar(id object, NSString *name) {
     Class cls = [object class];
     while (cls) {
@@ -102,6 +111,7 @@ void YTVideoPermissionsInstall(void) {
     YTHookMethod(video, @"initAllowingComments:allowingRating:ownVideo:", (IMP)YTHookVideoInit, (IMP *)&YTOrigVideoInit);
     YTHookMethod(video, @"commentsURL", (IMP)YTHookCommentsURL, (IMP *)&YTOrigCommentsURL);
     YTHookMethod(NSClassFromString(@"YTCommentsRequest"), @"initRequestingCommentsForVideo:withDelegate:", (IMP)YTHookCommentsRequestInit, (IMP *)&YTOrigCommentsRequestInit);
+    YTHookMethod(NSClassFromString(@"YTCommentsRequest"), @"loadRequest:", (IMP)YTHookCommentsLoad, NULL);
     YTHookMethod(NSClassFromString(@"YTCommentsView"), @"setVideo:", (IMP)YTHookCommentsViewSetVideo, (IMP *)&YTOrigCommentsViewSetVideo);
     YTHookMethod(NSClassFromString(@"YTVideoDetailsView"), @"setVideo:", (IMP)YTHookDetailsViewSetVideo, (IMP *)&YTOrigDetailsViewSetVideo);
 }

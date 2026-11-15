@@ -511,7 +511,7 @@ void YTSaveCommentParams(NSString *videoID, id json) {
 
 NSData *YTCommentFeed(NSString *videoID) {
     NSMutableString *xml = [NSMutableString string];
-    [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/' xmlns:yt='http://gdata.youtube.com/schemas/2007' yt:x='1'>"];
+    [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/'>"];
     if (YTPrefBool(@"comments", YES) && videoID.length) {
         YTLog([NSString stringWithFormat:@"comments feed %@", videoID]);
         id first = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
@@ -536,15 +536,18 @@ NSData *YTCommentFeed(NSString *videoID) {
             [unique addObject:item];
         }
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ss'Z'"];
+        [formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+        [formatter setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
+        [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
         NSString *now = [formatter stringFromDate:[NSDate date]];
         [xml appendFormat:@"<openSearch:totalResults>%u</openSearch:totalResults><openSearch:startIndex>1</openSearch:startIndex><openSearch:itemsPerPage>%u</openSearch:itemsPerPage>",
          (unsigned)[unique count], (unsigned)[unique count]];
         for (NSDictionary *item in unique) {
             NSString *cid = [item objectForKey:@"id"] ?: now;
             NSString *date = [item objectForKey:@"date"];
-            if (!date.length) date = now;
-            [xml appendFormat:@"<entry yt:x='1'><id>tag:youtube.com,2008:video:%@:comment:%@</id><published>%@</published><updated>%@</updated><author yt:x='1'><name yt:x='1'>%@</name></author><content type='text'>%@</content></entry>",
+            if (date.length < 19 || [date characterAtIndex:4] != '-' || [date characterAtIndex:10] != 'T') date = now;
+            else date = [[date substringToIndex:19] stringByAppendingString:@"+0000"];
+            [xml appendFormat:@"<entry><id>tag:youtube.com,2008:video:%@:comment:%@</id><published>%@</published><updated>%@</updated><author><name>%@</name></author><content>%@</content></entry>",
              YTEscape(videoID), YTEscape([cid description]), YTEscape(date), YTEscape(date),
              YTEscape([item objectForKey:@"author"] ?: @""), YTEscape([item objectForKey:@"text"] ?: @"")];
         }
