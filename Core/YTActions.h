@@ -1,6 +1,10 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+extern void (*YTOrigAddHistory)(id, SEL, id);
+void YTHookAddHistory(id self, SEL cmd, id video);
+void YTHookAddHistoryNow(id self, SEL cmd, id video);
+extern void (*YTOrigAddHistoryNow)(id, SEL, id);
 extern void (*YTOrigHistoryReload)(id, SEL);
 extern void (*YTOrigMyVideosReload)(id, SEL);
 id YTPSDelegate(id request);

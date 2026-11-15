@@ -1,7 +1,37 @@
 #import "5Tube.h"
 
+void (*YTOrigAddHistory)(id, SEL, id);
+void (*YTOrigAddHistoryNow)(id, SEL, id);
 void (*YTOrigHistoryReload)(id, SEL);
 void (*YTOrigMyVideosReload)(id, SEL);
+
+static double YTVideoDuration(id video) {
+    if (!video) return 0;
+    SEL sel = @selector(duration);
+    Method method = class_getInstanceMethod([video class], sel);
+    if (!method) return 0;
+    char type = method_getTypeEncoding(method)[0];
+    if (type == 'd') return ((double (*)(id, SEL))objc_msgSend)(video, sel);
+    if (type == 'f') return ((float (*)(id, SEL))objc_msgSend)(video, sel);
+    return ((int (*)(id, SEL))objc_msgSend)(video, sel);
+}
+
+static BOOL YTSkipLongHistory(id self, NSString *label, id video) {
+    double seconds = YTVideoDuration(video);
+    if (seconds < 3600) return NO;
+    YTLog([NSString stringWithFormat:@"%@ long %@ %.0f", label, YTVideoToken(video), seconds]);
+    return YES;
+}
+
+void YTHookAddHistory(id self, SEL cmd, id video) {
+    if (YTSkipLongHistory(self, @"skip history", video)) return;
+    if (YTOrigAddHistory) YTOrigAddHistory(self, cmd, video);
+}
+
+void YTHookAddHistoryNow(id self, SEL cmd, id video) {
+    if (YTSkipLongHistory(self, @"skip history now", video)) return;
+    if (YTOrigAddHistoryNow) YTOrigAddHistoryNow(self, cmd, video);
+}
 
 id YTPSDelegate(id request) {
     Class cls = [request class];
