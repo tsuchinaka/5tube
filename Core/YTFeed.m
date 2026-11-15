@@ -513,15 +513,18 @@ NSData *YTCommentFeed(NSString *videoID) {
     NSMutableString *xml = [NSMutableString string];
     [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/' xmlns:yt='http://gdata.youtube.com/schemas/2007' yt:x='1'>"];
     if (YTPrefBool(@"comments", YES) && videoID.length) {
+        YTLog([NSString stringWithFormat:@"comments feed %@", videoID]);
         id first = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
         YTSaveCommentParams(videoID, first);
         NSMutableArray *tokens = [NSMutableArray array];
         YTCollectContinuations(first, tokens, 0);
+        YTLog([NSString stringWithFormat:@"comments next %u", (unsigned)[tokens count]]);
         NSMutableArray *comments = [NSMutableArray array];
         for (NSString *token in tokens) {
             id page = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
             if (!YTHasKey(page, @"commentThreadRenderer", 0) && !YTHasKey(page, @"commentEntityPayload", 0)) continue;
             YTCollectComments(page, comments, 0);
+            YTLog([NSString stringWithFormat:@"comments page %u", (unsigned)[comments count]]);
             if (comments.count) break;
         }
         NSMutableSet *seen = [NSMutableSet set];

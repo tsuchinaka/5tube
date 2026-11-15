@@ -257,9 +257,9 @@ void YTHookAuthLoad(id self, SEL cmd, id request, id delegate, BOOL auth) {
     NSURL *url = [request respondsToSelector:@selector(URL)] ? [request URL] : nil;
     YTLog([NSString stringWithFormat:@"loadAuth %d %@", auth, [url absoluteString]]);
     if ([request isKindOfClass:[NSURLRequest class]] && YTShouldHandle(request)) {
-        YTAuthDidLoad = NO;
-        if (YTOrigAuthLoad) YTOrigAuthLoad(self, cmd, request, delegate, auth);
-        if (!YTAuthDidLoad) YTStartLoad(self, request);
+        if (delegate && [self respondsToSelector:@selector(setDelegate:)])
+            ((void (*)(id, SEL, id))objc_msgSend)(self, @selector(setDelegate:), delegate);
+        YTStartLoad(self, request);
         return;
     }
     if (YTOrigAuthLoad) YTOrigAuthLoad(self, cmd, request, delegate, auth);
