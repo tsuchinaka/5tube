@@ -233,13 +233,70 @@ NSArray *YTPage(NSArray *items, NSInteger start, NSInteger limit) {
     return [items subarrayWithRange:NSMakeRange((NSUInteger)skip, (NSUInteger)(end - skip))];
 }
 
-void YTListEnter(void) {
-    if (!YTListLock) YTListLock = [[NSRecursiveLock alloc] init];
-    [YTListLock lock];
+// One lock per feed key. The old single lock serialized every network call,
+// so opening several sections left them all spinning behind one slow feed.
+static NSMutableDictionary *YTKeyLocks;
+
+// The caches themselves are shared across keys, so they keep a short lock of
+// their own while the network work runs unlocked.
+static NSRecursiveLock *YTStoreLock;
+
+static void YTStoreLockInit(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ YTStoreLock = [[NSRecursiveLock alloc] init]; });
 }
 
-void YTListLeave(void) {
-    [YTListLock unlock];
+static NSMutableDictionary *YTPages(void) {
+    YTStoreLockInit();
+    [YTStoreLock lock];
+    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
+    NSMutableDictionary *dict = YTPageCache;
+    [YTStoreLock unlock];
+    return dict;
+}
+
+static NSMutableDictionary *YTTokens(void) {
+    YTStoreLockInit();
+    [YTStoreLock lock];
+    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
+    NSMutableDictionary *dict = YTTokenCache;
+    [YTStoreLock unlock];
+    return dict;
+}
+
+static id YTCacheObject(NSMutableDictionary *dict, NSString *key) {
+    YTStoreLockInit();
+    [YTStoreLock lock];
+    id value = [dict objectForKey:key];
+    [YTStoreLock unlock];
+    return value;
+}
+
+static void YTCacheSet(NSMutableDictionary *dict, id value, NSString *key) {
+    YTStoreLockInit();
+    [YTStoreLock lock];
+    if (value) [dict setObject:value forKey:key];
+    else [dict removeObjectForKey:key];
+    [YTStoreLock unlock];
+}
+
+id YTListEnter(NSString *key) {
+    NSString *name = key.length ? key : @"default";
+    NSRecursiveLock *lock = nil;
+    @synchronized(@"YTKeyLocks") {
+        if (!YTKeyLocks) YTKeyLocks = [NSMutableDictionary dictionary];
+        lock = [YTKeyLocks objectForKey:name];
+        if (!lock) {
+            lock = [[NSRecursiveLock alloc] init];
+            [YTKeyLocks setObject:lock forKey:name];
+        }
+    }
+    [lock lock];
+    return lock;
+}
+
+void YTListLeave(id token) {
+    [(NSRecursiveLock *)token unlock];
 }
 
 NSString *YTFindToken(id node, int depth) {
@@ -300,19 +357,6 @@ static void YTCollectContinuations(id node, NSMutableArray *out, int depth) {
     for (id child in [node allValues]) YTCollectContinuations(child, out, depth + 1);
 }
 
-static BOOL YTHasKey(id node, NSString *key, int depth) {
-    if (!node || depth > 12) return NO;
-    if ([node isKindOfClass:[NSDictionary class]]) {
-        if (YTGet(node, key)) return YES;
-        for (id child in [node allValues]) if (YTHasKey(child, key, depth + 1)) return YES;
-        return NO;
-    }
-    if ([node isKindOfClass:[NSArray class]]) {
-        for (id child in node) if (YTHasKey(child, key, depth + 1)) return YES;
-    }
-    return NO;
-}
-
 void YTCollectComments(id node, NSMutableArray *out, int depth) {
     if (!node || depth > 16) return;
     if ([node isKindOfClass:[NSArray class]]) {
@@ -351,17 +395,17 @@ void YTCollectComments(id node, NSMutableArray *out, int depth) {
 }
 
 NSArray *YTFillKey(NSString *key, NSString *query, NSString *browseID, NSInteger need) {
-    YTListEnter();
-    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
-    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
-    NSMutableArray *all = [YTPageCache objectForKey:key];
+    id listLock = YTListEnter(key);
+    NSMutableDictionary *pages = YTPages();
+    NSMutableDictionary *tokens = YTTokens();
+    NSMutableArray *all = YTCacheObject(pages, key);
     if (!all) {
         all = [NSMutableArray array];
-        [YTPageCache setObject:all forKey:key];
+        YTCacheSet(pages, all, key);
     }
     BOOL paging = YTPrefBool(@"paging", YES);
     while ((NSInteger)[all count] < need) {
-        NSString *token = [YTTokenCache objectForKey:key];
+        NSString *token = YTCacheObject(tokens, key);
         id json = nil;
         if (!token.length && ![all count]) {
             if (browseID.length) json = YTPost(@"browse", [NSDictionary dictionaryWithObject:browseID forKey:@"browseId"]);
@@ -380,30 +424,30 @@ NSArray *YTFillKey(NSString *key, NSString *query, NSString *browseID, NSInteger
             [all addObject:item];
         }
         NSString *next = YTFindToken(json, 0);
-        if (next.length) [YTTokenCache setObject:next forKey:key];
+        if (next.length) YTCacheSet(tokens, next, key);
         else {
-            [YTTokenCache removeObjectForKey:key];
+            YTCacheSet(tokens, nil, key);
             break;
         }
         if (!paging) break;
     }
     NSArray *snapshot = [NSArray arrayWithArray:all];
-    YTListLeave();
+    YTListLeave(listLock);
     return snapshot;
 }
 
 NSArray *YTFillSearch(NSString *key, NSString *query, NSString *params, NSString *region, NSInteger need) {
-    YTListEnter();
-    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
-    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
-    NSMutableArray *all = [YTPageCache objectForKey:key];
+    id listLock = YTListEnter(key);
+    NSMutableDictionary *pages = YTPages();
+    NSMutableDictionary *tokens = YTTokens();
+    NSMutableArray *all = YTCacheObject(pages, key);
     if (!all) {
         all = [NSMutableArray array];
-        [YTPageCache setObject:all forKey:key];
+        YTCacheSet(pages, all, key);
     }
     BOOL paging = YTPrefBool(@"paging", YES);
     while ((NSInteger)[all count] < need) {
-        NSString *token = [YTTokenCache objectForKey:key];
+        NSString *token = YTCacheObject(tokens, key);
         id json = nil;
         if (!token.length && ![all count]) {
             NSMutableDictionary *body = [NSMutableDictionary dictionary];
@@ -431,15 +475,15 @@ NSArray *YTFillSearch(NSString *key, NSString *query, NSString *params, NSString
             [all addObject:item];
         }
         NSString *next = YTFindToken(json, 0);
-        if (next.length) [YTTokenCache setObject:next forKey:key];
+        if (next.length) YTCacheSet(tokens, next, key);
         else {
-            [YTTokenCache removeObjectForKey:key];
+            YTCacheSet(tokens, nil, key);
             break;
         }
         if (!paging) break;
     }
     NSArray *snapshot = [NSArray arrayWithArray:all];
-    YTListLeave();
+    YTListLeave(listLock);
     return snapshot;
 }
 
@@ -509,59 +553,89 @@ void YTSaveCommentParams(NSString *videoID, id json) {
     [YTCommentParams setObject:params forKey:videoID];
 }
 
+static NSDate *YTCommentDate(NSString *text) {
+    NSDate *now = [NSDate date];
+    if (!text.length) return now;
+    NSArray *parts = [text componentsSeparatedByString:@" "];
+    if (parts.count < 2) return now;
+    NSInteger n = [[parts objectAtIndex:0] integerValue];
+    NSString *unit = [[parts objectAtIndex:1] lowercaseString];
+    double seconds = 0;
+    if ([unit hasPrefix:@"second"]) seconds = n;
+    else if ([unit hasPrefix:@"minute"]) seconds = n * 60;
+    else if ([unit hasPrefix:@"hour"]) seconds = n * 3600;
+    else if ([unit hasPrefix:@"day"]) seconds = n * 86400;
+    else if ([unit hasPrefix:@"week"]) seconds = n * 604800;
+    else if ([unit hasPrefix:@"month"]) seconds = n * 2592000;
+    else if ([unit hasPrefix:@"year"]) seconds = n * 31536000;
+    return seconds > 0 ? [now dateByAddingTimeInterval:-seconds] : now;
+}
+
+NSArray *YTCommentItems(NSString *videoID) {
+    NSMutableArray *items = [NSMutableArray array];
+    if (!YTPrefBool(@"comments", YES) || !videoID.length) return items;
+    YTLog([NSString stringWithFormat:@"comments feed %@", videoID]);
+    id first = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
+    YTSaveCommentParams(videoID, first);
+    NSMutableArray *tokens = [NSMutableArray array];
+    YTCollectContinuations(first, tokens, 0);
+    NSMutableArray *commentTokens = [NSMutableArray array];
+    NSMutableArray *otherTokens = [NSMutableArray array];
+    for (NSString *token in tokens) {
+        if ([token rangeOfString:@"Y29tbWVudHMtc2VjdGlvbg"].location != NSNotFound ||
+            [token rangeOfString:@"comments-section"].location != NSNotFound)
+            [commentTokens addObject:token];
+        else [otherTokens addObject:token];
+    }
+    [commentTokens addObjectsFromArray:otherTokens];
+    YTLog([NSString stringWithFormat:@"comments next %u", (unsigned)[commentTokens count]]);
+    NSMutableArray *raw = [NSMutableArray array];
+    for (NSString *token in commentTokens) {
+        id page = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
+        YTCollectComments(page, raw, 0);
+        YTLog([NSString stringWithFormat:@"comments page %u", (unsigned)[raw count]]);
+        if (raw.count) break;
+    }
+    NSMutableSet *seen = [NSMutableSet set];
+    for (NSDictionary *item in raw) {
+        id cid = [item objectForKey:@"id"];
+        if (cid && [seen containsObject:cid]) continue;
+        if (cid) [seen addObject:cid];
+        NSString *author = [item objectForKey:@"author"] ?: @"";
+        NSString *text = [item objectForKey:@"text"] ?: @"";
+        NSString *relative = [item objectForKey:@"date"] ?: @"";
+        NSDate *date = YTCommentDate(relative);
+        NSMutableDictionary *entry = [NSMutableDictionary dictionary];
+        // The cell reads these four keys; the lowercase copies cover the
+        // older code paths that still look them up by name.
+        [entry setObject:author forKey:@"Author"];
+        [entry setObject:text forKey:@"Text"];
+        [entry setObject:date forKey:@"PublishedDate"];
+        [entry setObject:relative forKey:@"PublishedDateString"];
+        [entry setObject:author forKey:@"author"];
+        [entry setObject:text forKey:@"text"];
+        [entry setObject:date forKey:@"date"];
+        [items addObject:entry];
+    }
+    YTLog([NSString stringWithFormat:@"comments %@ %u", videoID, (unsigned)[items count]]);
+    return items;
+}
+
 NSData *YTCommentFeed(NSString *videoID) {
     NSMutableString *xml = [NSMutableString string];
     [xml appendString:@"<?xml version='1.0' encoding='UTF-8'?><feed xmlns='http://www.w3.org/2005/Atom' xmlns:openSearch='http://a9.com/-/spec/opensearch/1.1/'>"];
-    if (YTPrefBool(@"comments", YES) && videoID.length) {
-        YTLog([NSString stringWithFormat:@"comments feed %@", videoID]);
-        id first = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
-        YTSaveCommentParams(videoID, first);
-        NSMutableArray *tokens = [NSMutableArray array];
-        YTCollectContinuations(first, tokens, 0);
-        NSMutableArray *commentTokens = [NSMutableArray array];
-        NSMutableArray *otherTokens = [NSMutableArray array];
-        for (NSString *token in tokens) {
-            if ([token rangeOfString:@"Y29tbWVudHMtc2VjdGlvbg"].location != NSNotFound ||
-                [token rangeOfString:@"comments-section"].location != NSNotFound)
-                [commentTokens addObject:token];
-            else [otherTokens addObject:token];
-        }
-        [commentTokens addObjectsFromArray:otherTokens];
-        tokens = commentTokens;
-        YTLog([NSString stringWithFormat:@"comments next %u", (unsigned)[tokens count]]);
-        NSMutableArray *comments = [NSMutableArray array];
-        for (NSString *token in tokens) {
-            id page = YTPostWeb(@"next", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
-            if (!YTHasKey(page, @"commentThreadRenderer", 0) && !YTHasKey(page, @"commentEntityPayload", 0)) continue;
-            YTCollectComments(page, comments, 0);
-            YTLog([NSString stringWithFormat:@"comments page %u", (unsigned)[comments count]]);
-            if (comments.count) break;
-        }
-        NSMutableSet *seen = [NSMutableSet set];
-        NSMutableArray *unique = [NSMutableArray array];
-        for (NSDictionary *item in comments) {
-            id cid = [item objectForKey:@"id"];
-            if (cid && [seen containsObject:cid]) continue;
-            if (cid) [seen addObject:cid];
-            [unique addObject:item];
-        }
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
-        [formatter setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
-        [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
-        NSString *now = [formatter stringFromDate:[NSDate date]];
-        [xml appendFormat:@"<openSearch:totalResults>%u</openSearch:totalResults><openSearch:startIndex>1</openSearch:startIndex><openSearch:itemsPerPage>%u</openSearch:itemsPerPage>",
-         (unsigned)[unique count], (unsigned)[unique count]];
-        for (NSDictionary *item in unique) {
-            NSString *cid = [item objectForKey:@"id"] ?: now;
-            NSString *date = [item objectForKey:@"date"];
-            if (date.length < 19 || [date characterAtIndex:4] != '-' || [date characterAtIndex:10] != 'T') date = now;
-            else date = [[date substringToIndex:19] stringByAppendingString:@"+0000"];
-            [xml appendFormat:@"<entry><id>tag:youtube.com,2008:video:%@:comment:%@</id><published>%@</published><updated>%@</updated><author><name>%@</name></author><content>%@</content></entry>",
-             YTEscape(videoID), YTEscape([cid description]), YTEscape(date), YTEscape(date),
-             YTEscape([item objectForKey:@"author"] ?: @""), YTEscape([item objectForKey:@"text"] ?: @"")];
-        }
-        YTLog([NSString stringWithFormat:@"comments %@ %u", videoID, (unsigned)[unique count]]);
+    NSArray *items = YTCommentItems(videoID);
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setLocale:[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"]];
+    [formatter setTimeZone:[NSTimeZone timeZoneForSecondsFromGMT:0]];
+    [formatter setDateFormat:@"yyyy-MM-dd'T'HH:mm:ssZ"];
+    [xml appendFormat:@"<openSearch:totalResults>%u</openSearch:totalResults><openSearch:startIndex>1</openSearch:startIndex><openSearch:itemsPerPage>%u</openSearch:itemsPerPage>",
+     (unsigned)[items count], (unsigned)[items count]];
+    for (NSDictionary *item in items) {
+        NSString *date = [formatter stringFromDate:[item objectForKey:@"PublishedDate"]];
+        [xml appendFormat:@"<entry><id>tag:youtube.com,2008:video:%@:comment:%u</id><published>%@</published><updated>%@</updated><author><name>%@</name></author><content>%@</content></entry>",
+         YTEscape(videoID), (unsigned)[items indexOfObject:item], YTEscape(date), YTEscape(date),
+         YTEscape([item objectForKey:@"Author"]), YTEscape([item objectForKey:@"Text"])];
     }
     [xml appendString:@"</feed>"];
     return [xml dataUsingEncoding:NSUTF8StringEncoding];
@@ -773,19 +847,19 @@ id YTAuthPost(NSString *browseID, NSString *params, NSString *continuation) {
 
 NSArray *YTAuthVideos(NSString *key, NSString *browseID, NSString *params, NSInteger need) {
     if (!YTAuthSignedIn() || !browseID.length) return [NSArray array];
-    YTListEnter();
-    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
-    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
     NSString *cacheKey = [@"auth:" stringByAppendingString:key ?: browseID];
-    NSMutableArray *all = [YTPageCache objectForKey:cacheKey];
+    id listLock = YTListEnter(cacheKey);
+    NSMutableDictionary *pages = YTPages();
+    NSMutableDictionary *tokens = YTTokens();
+    NSMutableArray *all = YTCacheObject(pages, cacheKey);
     if (!all) {
         all = [NSMutableArray array];
-        [YTPageCache setObject:all forKey:cacheKey];
+        YTCacheSet(pages, all, cacheKey);
     }
     int guard = 0;
     while ((NSInteger)[all count] < need && guard < 6) {
         guard++;
-        NSString *token = [YTTokenCache objectForKey:cacheKey];
+        NSString *token = YTCacheObject(tokens, cacheKey);
         id json = nil;
         if (!token.length && guard == 1) json = YTAuthPost(browseID, params, nil);
         else if (token.length) json = YTAuthPost(nil, nil, token);
@@ -801,15 +875,15 @@ NSArray *YTAuthVideos(NSString *key, NSString *browseID, NSString *params, NSInt
         }
         if ([all count] == before) break;
         NSString *next = YTFindToken(json, 0);
-        if (next.length) [YTTokenCache setObject:next forKey:cacheKey];
+        if (next.length) YTCacheSet(tokens, next, cacheKey);
         else {
-            [YTTokenCache removeObjectForKey:cacheKey];
+            YTCacheSet(tokens, nil, cacheKey);
             break;
         }
     }
     YTLog([NSString stringWithFormat:@"browse %@ %u", browseID, (unsigned)[all count]]);
     NSArray *snapshot = [NSArray arrayWithArray:all];
-    YTListLeave();
+    YTListLeave(listLock);
     return snapshot;
 }
 
@@ -823,19 +897,19 @@ NSArray *YTSubVideos(NSInteger need) {
 
 NSArray *YTRelated(NSString *videoID, NSInteger need) {
     if (!videoID.length) return [NSArray array];
-    YTListEnter();
-    if (!YTPageCache) YTPageCache = [NSMutableDictionary dictionary];
-    if (!YTTokenCache) YTTokenCache = [NSMutableDictionary dictionary];
     NSString *key = [@"related:" stringByAppendingString:videoID];
-    NSMutableArray *all = [YTPageCache objectForKey:key];
+    id listLock = YTListEnter(key);
+    NSMutableDictionary *pages = YTPages();
+    NSMutableDictionary *tokens = YTTokens();
+    NSMutableArray *all = YTCacheObject(pages, key);
     if (!all) {
         all = [NSMutableArray array];
-        [YTPageCache setObject:all forKey:key];
+        YTCacheSet(pages, all, key);
     }
     int guard = 0;
     while ((NSInteger)[all count] < need && guard < 4) {
         guard++;
-        NSString *token = [YTTokenCache objectForKey:key];
+        NSString *token = YTCacheObject(tokens, key);
         id json = nil;
         if (!token.length && ![all count]) json = YTPost(@"next", [NSDictionary dictionaryWithObject:videoID forKey:@"videoId"]);
         else if (token.length) json = YTPost(@"next", [NSDictionary dictionaryWithObject:token forKey:@"continuation"]);
@@ -850,14 +924,14 @@ NSArray *YTRelated(NSString *videoID, NSInteger need) {
         }
         if ([all count] == before) break;
         NSString *next = YTFindToken(json, 0);
-        if (next.length) [YTTokenCache setObject:next forKey:key];
+        if (next.length) YTCacheSet(tokens, next, key);
         else {
-            [YTTokenCache removeObjectForKey:key];
+            YTCacheSet(tokens, nil, key);
             break;
         }
     }
     NSArray *snapshot = [NSArray arrayWithArray:all];
-    YTListLeave();
+    YTListLeave(listLock);
     return snapshot;
 }
 

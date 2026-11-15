@@ -43,7 +43,7 @@ id YTPostMode(NSString *method, NSDictionary *body, int mode) {
     NSString *urlString = [NSString stringWithFormat:@"https://www.youtube.com/youtubei/v1/%@?key=%@", method, key];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]
                                                             cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                                        timeoutInterval:25.0];
+                                                        timeoutInterval:9.0];
     [request setHTTPMethod:@"POST"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     NSString *agent = @"com.google.android.youtube/20.10.38 (Linux; U; Android 13)";
@@ -89,7 +89,7 @@ id YTPostWeb(NSString *method, NSDictionary *body) {
 }
 
 NSData *YTGET(NSString *urlString) {
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:20];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:9];
     [request setValue:@"com.google.android.youtube/20.10.38" forHTTPHeaderField:@"User-Agent"];
     [NSURLProtocol setProperty:[NSNumber numberWithBool:YES] forKey:YTMark inRequest:request];
     return [NSURLConnection sendSynchronousRequest:request returningResponse:NULL error:NULL];

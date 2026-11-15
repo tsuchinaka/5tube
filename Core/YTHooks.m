@@ -223,13 +223,21 @@ void YTStartLoad(id self, id request) {
     id delegate = YTPSDelegate(self);
     if (delegate) objc_setAssociatedObject(self, "YTFeedDelegate", delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if ([self respondsToSelector:@selector(_startedLoading)]) [self performSelector:@selector(_startedLoading)];
+    // Battery and bandwidth on the A4 cannot take twenty feeds at once; cap
+    // them so a section opens while the rest wait in line instead of all
+    // hammering the network and timing out together.
+    static dispatch_semaphore_t slots;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ slots = dispatch_semaphore_create(6); });
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        dispatch_semaphore_wait(slots, DISPATCH_TIME_FOREVER);
         NSData *body = nil;
         @try {
             body = YTAtomForRequest(request);
         } @catch (NSException *exception) {
             YTLog([NSString stringWithFormat:@"load exception %@", exception]);
         }
+        dispatch_semaphore_signal(slots);
         dispatch_async(dispatch_get_main_queue(), ^{
             YTFinishLoad(self, url, body);
         });

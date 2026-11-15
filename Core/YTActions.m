@@ -35,13 +35,35 @@ static id YTHookCommentsRequestInit(id self, SEL cmd, id video, id delegate) {
     return YTOrigCommentsRequestInit ? YTOrigCommentsRequestInit(self, cmd, video, delegate) : nil;
 }
 
+static Ivar YTFindIvar(id object, NSString *name);
+
 // YTCommentsRequest overrides loadRequest: and hands the URL to
 // YTAuthenticator. Device auth never completes, so the request stays
-// deferred and the comments view spins forever. Deliver it ourselves.
+// deferred and the comments view spins forever. Its SAX parser also drops
+// the GData we build. Skip both: fetch the comments and hand the delegate a
+// ready array with the keys the cell reads.
 static void YTHookCommentsLoad(id self, SEL cmd, id request) {
     NSURL *url = [request respondsToSelector:@selector(URL)] ? [request URL] : nil;
-    YTLog([NSString stringWithFormat:@"comments load %@", [url absoluteString]]);
-    YTStartLoad(self, request);
+    NSString *vid = nil;
+    Ivar video = YTFindIvar(self, @"_video");
+    if (video) vid = YTVideoToken(object_getIvar(self, video));
+    id delegate = YTPSDelegate(self);
+    YTLog([NSString stringWithFormat:@"comments load %@ %@", vid ?: @"-", [url absoluteString]]);
+    if (!vid.length || !delegate || ![delegate respondsToSelector:@selector(commentsRequest:receivedComments:commentsRemaining:)]) {
+        YTStartLoad(self, request);
+        return;
+    }
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSArray *comments = YTCommentItems(vid);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            @try {
+                ((void (*)(id, SEL, id, id, BOOL))objc_msgSend)(delegate,
+                    @selector(commentsRequest:receivedComments:commentsRemaining:), self, comments, NO);
+            } @catch (NSException *exception) {
+                YTWriteCrash([NSString stringWithFormat:@"comments deliver %@", exception.reason]);
+            }
+        });
+    });
 }
 
 static Ivar YTFindIvar(id object, NSString *name) {
