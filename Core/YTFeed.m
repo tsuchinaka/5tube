@@ -288,7 +288,7 @@ NSString *YTFindBrowseID(id node, int depth) {
 }
 
 static void YTCollectContinuations(id node, NSMutableArray *out, int depth) {
-    if (!node || depth > 12) return;
+    if (!node || depth > 16) return;
     if ([node isKindOfClass:[NSArray class]]) {
         for (id child in node) YTCollectContinuations(child, out, depth + 1);
         return;
@@ -518,6 +518,16 @@ NSData *YTCommentFeed(NSString *videoID) {
         YTSaveCommentParams(videoID, first);
         NSMutableArray *tokens = [NSMutableArray array];
         YTCollectContinuations(first, tokens, 0);
+        NSMutableArray *commentTokens = [NSMutableArray array];
+        NSMutableArray *otherTokens = [NSMutableArray array];
+        for (NSString *token in tokens) {
+            if ([token rangeOfString:@"Y29tbWVudHMtc2VjdGlvbg"].location != NSNotFound ||
+                [token rangeOfString:@"comments-section"].location != NSNotFound)
+                [commentTokens addObject:token];
+            else [otherTokens addObject:token];
+        }
+        [commentTokens addObjectsFromArray:otherTokens];
+        tokens = commentTokens;
         YTLog([NSString stringWithFormat:@"comments next %u", (unsigned)[tokens count]]);
         NSMutableArray *comments = [NSMutableArray array];
         for (NSString *token in tokens) {
